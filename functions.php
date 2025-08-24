@@ -5,6 +5,33 @@
  * @package Lilac
  */
 
+/**
+ * Add username, password reset link, and login information to WooCommerce new account email
+ */
+add_filter('woocommerce_email_content_customer_new_account', 'customize_new_account_email', 10, 3);
+
+function customize_new_account_email($email_content, $user, $email) {
+    // Get user data
+    $user_login = $user->user_login;
+    $user_email = $user->user_email;
+    $site_name = get_bloginfo('name');
+    
+    // Create login and password reset URLs
+    $login_url = wp_login_url();
+    $reset_url = add_query_arg(array('action' => 'lostpassword'), wp_login_url());
+    
+    // Customize the email content
+    $email_content = '<p>שלום ' . esc_html($user_login) . ',</p>';
+    $email_content .= '<p>ברוכים הבאים ל' . esc_html($site_name) . '! פרטי ההתחברות שלך:</p>';
+    $email_content .= '<p><strong>שם משתמש:</strong> ' . esc_html($user_login) . '</p>';
+    $email_content .= '<p>כדי להגדיר את הסיסמה שלך, לחץ על הקישור הבא: <a href="' . esc_url($reset_url) . '">איפוס סיסמה</a></p>';
+    $email_content .= '<p>או היכנס ישירות לחשבון שלך: <a href="' . esc_url($login_url) . '">כניסה לחשבון</a></p>';
+    $email_content .= '<p>אנא שמור את פרטי ההתחברות שלך במקום בטוח.</p>';
+    $email_content .= '<p>בברכה,<br>צוות ' . esc_html($site_name) . '</p>';
+    
+    return $email_content;
+}
+
 // LearnDash template override for course listing only
 add_filter('learndash_template', 'lilac_override_learndash_templates', 10, 5);
 
