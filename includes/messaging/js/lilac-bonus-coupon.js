@@ -252,12 +252,15 @@
     // Expose functions for external use
     window.LilacBonusSystem = {
         init: init,
-        showMessage: showLilacBonusMessage,
+        showMessage: showBonusMessage,
         checkPurchaseStatus: checkUserPurchaseStatus,
         resetSession: function() {
             sessionStorage.removeItem(settings.sessionKey);
         }
     };
+    
+    // Also expose the function globally for backwards compatibility
+    window.showLilacBonusMessage = showBonusMessage;
 
     // Auto-initialize
     init();

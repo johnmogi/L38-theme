@@ -56,11 +56,9 @@ function translate_learndash_expand_collapse($translated_text, $text, $domain) {
     // Catch all instances regardless of domain
     switch ($text) {
         case 'Expand All':
-            error_log("Translating 'Expand All' to Hebrew (domain: $domain)");
             return 'הרחב הכל';
         case 'Collapse All':
-            error_log("Translating 'Collapse All' to Hebrew (domain: $domain)");
-            return 'כווץ הכל';
+            return 'צמצם';
     }
     return $translated_text;
 }
@@ -77,11 +75,9 @@ function add_expand_all_translation_js() {
                 expandButtons.forEach(function(button) {
                     if (button.textContent.trim() === 'Expand All') {
                         button.textContent = 'הרחב הכל';
-                        console.log('Translated Expand All to Hebrew');
                     }
                     if (button.textContent.trim() === 'Collapse All') {
-                        button.textContent = 'כווץ הכל';
-                        console.log('Translated Collapse All to Hebrew');
+                        button.textContent = 'צמצם';
                     }
                 });
                 
@@ -89,30 +85,48 @@ function add_expand_all_translation_js() {
                 const expandButtonElements = document.querySelectorAll('.ld-expand-button[data-ld-expand-text="Expand All"]');
                 expandButtonElements.forEach(function(btn) {
                     btn.setAttribute('data-ld-expand-text', 'הרחב הכל');
-                    btn.setAttribute('data-ld-collapse-text', 'כווץ הכל');
+                    btn.setAttribute('data-ld-collapse-text', 'צמצם');
                 });
             }
             
             // Run translation immediately
             translateExpandButtons();
             
-            // Run translation again after a delay to catch dynamically loaded content
-            setTimeout(translateExpandButtons, 1000);
-            setTimeout(translateExpandButtons, 2000);
+            // Run translation with limited retries to avoid performance issues
+            let retryCount = 0;
+            const maxRetries = 3;
             
-            // Watch for DOM changes and re-translate
+            function retryTranslation() {
+                if (retryCount < maxRetries) {
+                    retryCount++;
+                    setTimeout(translateExpandButtons, 1000 * retryCount);
+                }
+            }
+            
+            retryTranslation();
+            
+            // Limited mutation observer - only for specific LearnDash containers
+            let observerTimeout;
             const observer = new MutationObserver(function(mutations) {
-                mutations.forEach(function(mutation) {
-                    if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-                        setTimeout(translateExpandButtons, 100);
-                    }
+                clearTimeout(observerTimeout);
+                observerTimeout = setTimeout(function() {
+                    translateExpandButtons();
+                }, 200);
+            });
+            
+            // Only observe LearnDash specific containers to reduce performance impact
+            const ldContainers = document.querySelectorAll('.learndash-wrapper, .ld-item-list');
+            ldContainers.forEach(function(container) {
+                observer.observe(container, {
+                    childList: true,
+                    subtree: false // Reduce scope
                 });
             });
             
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
+            // Disconnect observer after 10 seconds to prevent long-term performance impact
+            setTimeout(function() {
+                observer.disconnect();
+            }, 10000);
         });
         </script>
         <?php
@@ -129,7 +143,7 @@ function translate_learndash_expand_collapse_with_context($translated_text, $tex
             case 'Expand All':
                 return 'הרחב הכל';
             case 'Collapse All':
-                return 'כווץ הכל';
+                return 'צמצם';
         }
     }
     return $translated_text;
@@ -145,7 +159,7 @@ function translate_learndash_expand_collapse_plural($translated_text, $single, $
             case 'Expand All':
                 return 'הרחב הכל';
             case 'Collapse All':
-                return 'כווץ הכל';
+                return 'צמצם';
         }
     }
     return $translated_text;
