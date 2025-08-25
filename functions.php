@@ -2016,7 +2016,8 @@ add_shortcode('demo_subscription_button', function($atts) {
     return ob_get_clean();
 });
 
-// Add admin notice if YITH WooCommerce Subscription is not active
+// DISABLED: Admin notice for YITH WooCommerce Subscription - plugin not in use
+/*
 add_action('admin_notices', function() {
     if (!class_exists('YITH_WC_Subscription') && current_user_can('activate_plugins')) {
         echo '<div class="notice notice-warning"><p>' . 
@@ -2028,6 +2029,7 @@ add_action('admin_notices', function() {
              '</p></div>';
     }
 });
+*/
 
 /**
  * Add custom body class for LearnDash courses
@@ -2107,7 +2109,7 @@ function lilac_maybe_create_demo_subscription() {
     
     // Check if YITH WooCommerce Subscription is active
     if (!function_exists('ywsbs_is_subscription_product')) {
-        error_log('[LILAC] YITH WooCommerce Subscription is not active. Cannot create demo subscription product.');
+        // DISABLED: YITH plugin not active - skip subscription product creation
         return;
     }
     
@@ -3830,16 +3832,21 @@ add_filter('woocommerce_checkout_customer', function($customer_data) {
 // Load School Class Helper functions
 require_once get_stylesheet_directory() . '/includes/school-class-helper.php';
 
-// Include School Class Manager
+// Include required classes
+require_once get_stylesheet_directory() . '/includes/class-promo-codes.php';
 require_once get_stylesheet_directory() . '/includes/admin/class-school-class-manager.php';
+
 add_action('init', function() {
     // This will ensure the shortcode is registered at the right time
-    Hello_Theme_Child_Promo_Codes::instance();
+    if (class_exists('Hello_Theme_Child_Promo_Codes')) {
+        Hello_Theme_Child_Promo_Codes::instance();
+    }
     
     // Initialize School Class Manager
-    Hello_Theme_Child_School_Class_Manager::instance();
+    if (class_exists('Hello_Theme_Child_School_Class_Manager')) {
+        Hello_Theme_Child_School_Class_Manager::instance();
+    }
 }, 5);
-
 
 // Function to render admin class manager view
 if (!function_exists('hello_theme_render_admin_class_manager')) {
