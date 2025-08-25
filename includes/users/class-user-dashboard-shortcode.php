@@ -179,13 +179,16 @@ class User_Dashboard_Shortcode {
     }
 
     /**
-     * Get user's primary course name for dynamic display
+     * Get user's primary course info for dynamic display
      *
-     * @return string
+     * @return array Course info with title and URL
      */
-    private function get_user_primary_course_name() {
+    private function get_user_primary_course_info() {
         if (!is_user_logged_in()) {
-            return 'חינוך תעבורתי'; // Default fallback
+            return array(
+                'title' => 'חינוך תעבורתי',
+                'url' => '#'
+            ); // Default fallback
         }
 
         $user_id = get_current_user_id();
@@ -194,7 +197,10 @@ class User_Dashboard_Shortcode {
         $user_courses = learndash_user_get_enrolled_courses($user_id);
         
         if (empty($user_courses)) {
-            return 'חינוך תעבורתי'; // Default fallback
+            return array(
+                'title' => 'חינוך תעבורתי',
+                'url' => '#'
+            ); // Default fallback
         }
         
         // Priority order: תעבורתי courses first, then course 898, then first active course
@@ -211,20 +217,25 @@ class User_Dashboard_Shortcode {
                 continue;
             }
             
+            $course_info = array(
+                'title' => $course->post_title,
+                'url' => get_permalink($course_id)
+            );
+            
             // Priority 1: Courses with "תעבורתי" in title
             if (strpos($course->post_title, 'תעבורתי') !== false) {
-                $priority_course = $course->post_title;
+                $priority_course = $course_info;
                 break;
             }
             
             // Priority 2: Course 898
             if ($course_id == 898) {
-                $course_898 = $course->post_title;
+                $course_898 = $course_info;
             }
             
             // Priority 3: First active course
             if (!$first_active) {
-                $first_active = $course->post_title;
+                $first_active = $course_info;
             }
         }
         
@@ -237,7 +248,20 @@ class User_Dashboard_Shortcode {
             return $first_active;
         }
         
-        return 'חינוך תעבורתי'; // Final fallback
+        return array(
+            'title' => 'חינוך תעבורתי',
+            'url' => '#'
+        ); // Final fallback
+    }
+
+    /**
+     * Get user's primary course name for backward compatibility
+     *
+     * @return string
+     */
+    private function get_user_primary_course_name() {
+        $course_info = $this->get_user_primary_course_info();
+        return $course_info['title'];
     }
 
     /**
@@ -489,12 +513,12 @@ class User_Dashboard_Shortcode {
         // Get vehicle type text
         $vehicle_text = $this->get_vehicle_type_text($atts['vehicle_type']);
         
-        // Get dynamic course name
-        $dynamic_course_name = $this->get_user_primary_course_name();
+        // Get dynamic course info
+        $primary_course_info = $this->get_user_primary_course_info();
         
         // Override track_name with dynamic course name if not explicitly set
         if ($atts['track_name'] === $this->defaults['track_name']) {
-            $atts['track_name'] = $dynamic_course_name;
+            $atts['track_name'] = $primary_course_info['title'];
         }
         
         // Prepare welcome text
@@ -521,7 +545,7 @@ class User_Dashboard_Shortcode {
                             </div>
                             <div class="meta-item track">
                                 <span class="meta-icon">🎯</span>
-                                <span class="meta-text"><?php echo esc_html($atts['track_name']); ?></span>
+                                <a href="<?php echo esc_url($primary_course_info['url']); ?>" class="meta-text course-link"><?php echo esc_html($atts['track_name']); ?></a>
                             </div>
                         </div>
                     </div>
