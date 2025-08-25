@@ -32,38 +32,8 @@ function customize_new_account_email($email_content, $user, $email) {
     return $email_content;
 }
 
-// LearnDash template override for course listing only
-add_filter('learndash_template', 'lilac_override_learndash_templates', 10, 5);
-
-/**
- * Override specific LearnDash templates (course listing only)
- * Main course and lesson templates now use WordPress single post templates
- */
-function lilac_override_learndash_templates($filepath, $name, $args, $echo, $return_file_path) {
-    // Static cache to avoid repeated file_exists() calls
-    static $template_cache = array();
-    
-    // Define template overrides (only course listing now)
-    $template_overrides = array(
-        'course/listing.php' => '/learndash/ld30/templates/course/listing-flat.php'
-    );
-    
-    // Check if we have an override for this template
-    if (isset($template_overrides[$name])) {
-        // Use cached result if available
-        if (!isset($template_cache[$name])) {
-            $custom_template = get_stylesheet_directory() . $template_overrides[$name];
-            $template_cache[$name] = file_exists($custom_template) ? $custom_template : false;
-        }
-        
-        // Return cached template path if it exists
-        if ($template_cache[$name]) {
-            return $template_cache[$name];
-        }
-    }
-    
-    return $filepath;
-}
+// Allow LearnDash to use its default LD30 templates for better functionality
+// Removed custom template override to use native LearnDash display
 
 // Enable LearnDash Video Processing for LD30 theme
 // This constant is REQUIRED for LearnDash to process lesson videos
@@ -71,34 +41,8 @@ if (!defined('LEARNDASH_LESSON_VIDEO')) {
     define('LEARNDASH_LESSON_VIDEO', true);
 }
 
-// Ensure video content is processed in lesson templates
-add_filter('learndash_content', function($content, $post) {
-    if (is_singular(['sfwd-lessons', 'sfwd-topic'])) {
-        // Get video URL from lesson settings
-        $lesson_settings = learndash_get_setting($post->ID);
-        $video_url = '';
-        
-        if (!empty($lesson_settings['lesson_video_url'])) {
-            $video_url = $lesson_settings['lesson_video_url'];
-        } elseif (!empty($lesson_settings['sfwd-lessons_lesson_video_url'])) {
-            $video_url = $lesson_settings['sfwd-lessons_lesson_video_url'];
-        }
-        
-        // Also check meta fields directly
-        if (empty($video_url)) {
-            $video_meta = get_post_meta($post->ID, '_sfwd-lessons', true);
-            if (is_array($video_meta) && !empty($video_meta['sfwd-lessons_lesson_video_url'])) {
-                $video_url = $video_meta['sfwd-lessons_lesson_video_url'];
-            }
-        }
-        
-        // Add [ld_video] placeholder if video exists and not already in content
-        if (!empty($video_url) && strpos($content, '[ld_video]') === false) {
-            $content = '[ld_video]' . $content;
-        }
-    }
-    return $content;
-}, 10, 2);
+// Video content processing disabled to allow native LearnDash LD30 display
+// The mu-plugin learndash-video handles video integration properly
 
 // Fix for LearnDash WooCommerce translation loading issue
 add_action('init', function() {
@@ -280,18 +224,8 @@ add_action('wp_head', function() {
     }
 }, 999);
 
-/**
- * Ensure video shortcode is processed
- */
-add_filter('learndash_content', function($content, $post) {
-    if (is_singular(['sfwd-lessons', 'sfwd-topic'])) {
-        $video_url = get_post_meta($post->ID, '_ld_lesson_video_url', true);
-        if (!empty($video_url) && !has_shortcode($content, 'ld_video')) {
-            $content = '[ld_video]' . $content;
-        }
-    }
-    return $content;
-}, 10, 2);
+// Video shortcode processing disabled to allow native LearnDash LD30 display
+// The mu-plugin learndash-video handles video integration properly
 
 // Debug check for Timed Access module - DISABLED
 // Now using lilac-ajax-fix.php MU-plugin for better handling

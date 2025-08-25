@@ -272,8 +272,13 @@ class School_Login_Access_Control {
         
         global $post;
         
-        // Only apply to LearnDash courses
+        // Only apply to LearnDash courses, NOT lessons or topics
         if (!$post || $post->post_type !== 'sfwd-courses') {
+            return $content;
+        }
+        
+        // Explicitly allow lessons and topics to pass through
+        if (in_array($post->post_type, ['sfwd-lessons', 'sfwd-topic'])) {
             return $content;
         }
         
