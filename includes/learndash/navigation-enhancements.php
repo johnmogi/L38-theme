@@ -18,14 +18,22 @@ function lilac_fix_learndash_navigation_styles() {
     if (is_singular(['sfwd-lessons', 'sfwd-topic', 'sfwd-quiz'])) {
         ?>
         <style>
-        /* Fix "חזרה לשיעור" button visibility */
-        .ld-content-actions .ld-button,
-        .learndash-content-actions .ld-button,
-        .ld-lesson-navigation .ld-button,
-        .ld-topic-navigation .ld-button,
-        .ld-quiz-navigation .ld-button,
-        a[href*="lesson"]:contains("חזרה"),
-        a[href*="topic"]:contains("חזרה") {
+        /* Only target specific navigation buttons at the bottom */
+        .ld-content-actions .ld-content-action a {
+            background-color: #28a745 !important;
+            color: #ffffff !important;
+            border: 1px solid #28a745 !important;
+            text-decoration: none !important;
+            padding: 8px 16px !important;
+            border-radius: 4px !important;
+            font-weight: 500 !important;
+            display: inline-block !important;
+            margin: 5px !important;
+        }
+        
+        /* Specific targeting for the back to lesson button */
+        a.ld-course-step-back,
+        .ld-primary-color.ld-course-step-back {
             background-color: #28a745 !important;
             color: #ffffff !important;
             border: 1px solid #28a745 !important;
@@ -36,49 +44,34 @@ function lilac_fix_learndash_navigation_styles() {
             display: inline-block !important;
         }
         
-        /* Hover effects for navigation buttons */
-        .ld-content-actions .ld-button:hover,
-        .learndash-content-actions .ld-button:hover,
-        .ld-lesson-navigation .ld-button:hover,
-        .ld-topic-navigation .ld-button:hover,
-        .ld-quiz-navigation .ld-button:hover {
+        /* Back to course button positioning fix */
+        .lilac-back-to-course-button {
+            position: fixed !important;
+            top: 120px !important;
+            right: 20px !important;
+            z-index: 1000 !important;
+            background-color: #28a745 !important;
+            color: #ffffff !important;
+            border: 1px solid #28a745 !important;
+            text-decoration: none !important;
+            padding: 8px 16px !important;
+            border-radius: 4px !important;
+            font-weight: 500 !important;
+            display: inline-block !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        }
+        
+        .lilac-back-to-course-button:hover {
             background-color: #218838 !important;
             border-color: #1e7e34 !important;
             color: #ffffff !important;
         }
         
-        /* Fix any blue text on blue background issues */
-        .ld-content-actions a,
-        .learndash-content-actions a,
-        .ld-lesson-navigation a,
-        .ld-topic-navigation a {
+        /* Hover effects for navigation buttons */
+        .ld-content-actions .ld-content-action a:hover {
+            background-color: #218838 !important;
+            border-color: #1e7e34 !important;
             color: #ffffff !important;
-        }
-        
-        /* Ensure proper contrast for all navigation elements */
-        .ld-content-actions,
-        .learndash-content-actions,
-        .ld-lesson-navigation,
-        .ld-topic-navigation {
-            background: transparent !important;
-        }
-        
-        /* Style the next/previous navigation specifically */
-        .ld-lesson-navigation .ld-lesson-nav,
-        .ld-topic-navigation .ld-topic-nav {
-            margin: 20px 0;
-        }
-        
-        .ld-lesson-navigation .ld-lesson-nav a,
-        .ld-topic-navigation .ld-topic-nav a {
-            background-color: #28a745 !important;
-            color: #ffffff !important;
-            border: 1px solid #28a745 !important;
-            padding: 10px 20px !important;
-            border-radius: 4px !important;
-            text-decoration: none !important;
-            margin: 0 5px !important;
-            display: inline-block !important;
         }
         </style>
         <?php
@@ -154,71 +147,131 @@ function lilac_navigation_enhancement_script() {
         ?>
         <script>
         jQuery(document).ready(function($) {
+            console.log('Lilac Navigation Enhancement Script Loaded');
+            
             // Fix navigation button text and functionality
             function enhanceNavigationButtons() {
+                console.log('Running enhanceNavigationButtons');
+                
                 // Find buttons with "המבחן הבא" text and change to next lesson
-                $('a:contains("המבחן הבא")').each(function() {
+                // Look for both direct text and text within spans
+                var nextButtons = $('a').filter(function() {
+                    return $(this).text().trim() === 'המבחן הבא' || 
+                           $(this).find('.ld-text').text().trim() === 'המבחן הבא';
+                });
+                
+                console.log('Found next buttons:', nextButtons.length);
+                
+                nextButtons.each(function() {
                     var $button = $(this);
                     var href = $button.attr('href');
                     
+                    console.log('Processing button with href:', href);
+                    
                     // If this links to a quiz, we need to find the next lesson instead
-                    if (href && href.includes('quiz')) {
-                        // Get course ID from current page
-                        var courseId = $('body').attr('class').match(/course-(\d+)/);
-                        if (courseId) {
-                            // Change button text
+                    if (href && (href.includes('quiz') || href.includes('המבחן'))) {
+                        console.log('Button links to quiz, modifying...');
+                        
+                        // Change button text - handle both direct text and span structure
+                        var $textSpan = $button.find('.ld-text');
+                        if ($textSpan.length) {
+                            $textSpan.text('השיעור הבא');
+                        } else {
                             $button.text('השיעור הבא');
+                        }
+                        
+                        // Remove any existing click handlers
+                        $button.off('click.lilac-nav');
+                        
+                        // Add click handler to navigate to next lesson
+                        $button.on('click.lilac-nav', function(e) {
+                            e.preventDefault();
+                            console.log('Next lesson button clicked');
                             
-                            // Add click handler to navigate to next lesson
-                            $button.on('click', function(e) {
-                                e.preventDefault();
-                                
+                            // Get current post ID from body classes or global variable
+                            var currentPostId = <?php echo get_the_ID(); ?>;
+                            var courseId = null;
+                            
+                            // Try to extract course ID from body classes
+                            var bodyClasses = $('body').attr('class');
+                            var courseMatch = bodyClasses.match(/learndash-cpt-sfwd-courses-(\d+)-parent/);
+                            if (courseMatch) {
+                                courseId = courseMatch[1];
+                            }
+                            
+                            console.log('Course ID:', courseId, 'Current Post ID:', currentPostId);
+                            
+                            if (courseId && currentPostId) {
                                 // Make AJAX call to get next lesson
                                 $.ajax({
                                     url: '<?php echo admin_url('admin-ajax.php'); ?>',
                                     type: 'POST',
                                     data: {
                                         action: 'lilac_get_next_lesson',
-                                        course_id: courseId[1],
-                                        current_post_id: <?php echo get_the_ID(); ?>,
+                                        course_id: courseId,
+                                        current_post_id: currentPostId,
                                         nonce: '<?php echo wp_create_nonce('lilac_navigation'); ?>'
                                     },
                                     success: function(response) {
+                                        console.log('AJAX response:', response);
                                         if (response.success && response.data.next_url) {
                                             window.location.href = response.data.next_url;
                                         } else {
-                                            // Fallback: go to course page
-                                            window.location.href = $button.attr('href').replace(/\/quiz\/.*/, '');
+                                            // Fallback: try to find next topic in the same lesson
+                                            var fallbackUrl = href.replace(/\/quizzes\/.*/, '/');
+                                            if (fallbackUrl !== href) {
+                                                window.location.href = fallbackUrl;
+                                            } else {
+                                                // Last resort: go to course page
+                                                window.location.href = '/courses/קורס-מקוון-לרכב-פרטי/';
+                                            }
                                         }
                                     },
-                                    error: function() {
-                                        // Fallback: go to course page
-                                        window.location.href = $button.attr('href').replace(/\/quiz\/.*/, '');
+                                    error: function(xhr, status, error) {
+                                        console.log('AJAX error:', error);
+                                        // Fallback: try to find next topic in the same lesson
+                                        var fallbackUrl = href.replace(/\/quizzes\/.*/, '/');
+                                        if (fallbackUrl !== href) {
+                                            window.location.href = fallbackUrl;
+                                        } else {
+                                            // Last resort: go to course page
+                                            window.location.href = '/courses/קורס-מקוון-לרכב-פרטי/';
+                                        }
                                     }
                                 });
-                            });
-                        }
+                            } else {
+                                console.log('Missing course ID or post ID, using fallback');
+                                // Fallback navigation
+                                var fallbackUrl = href.replace(/\/quizzes\/.*/, '/');
+                                if (fallbackUrl !== href) {
+                                    window.location.href = fallbackUrl;
+                                } else {
+                                    window.location.href = '/courses/קורס-מקוון-לרכב-פרטי/';
+                                }
+                            }
+                        });
                     }
                 });
                 
-                // Fix visibility issues for "חזרה לשיעור" buttons
-                $('a:contains("חזרה")').each(function() {
+                // Only target navigation buttons in the content actions area
+                var backButtons = $('.ld-content-actions a').filter(function() {
+                    return $(this).text().indexOf('חזרה') !== -1;
+                });
+                
+                console.log('Found back buttons in content actions:', backButtons.length);
+                
+                backButtons.each(function() {
                     var $button = $(this);
-                    $button.css({
-                        'background-color': '#28a745',
-                        'color': '#ffffff',
-                        'border': '1px solid #28a745',
-                        'text-decoration': 'none',
-                        'padding': '8px 16px',
-                        'border-radius': '4px',
-                        'font-weight': '500',
-                        'display': 'inline-block'
-                    });
+                    console.log('Styling back button in content actions');
+                    // CSS will handle the styling, just ensure it's properly targeted
                 });
             }
             
-            // Run enhancement
+            // Run enhancement immediately
             enhanceNavigationButtons();
+            
+            // Re-run after a short delay to catch dynamically loaded content
+            setTimeout(enhanceNavigationButtons, 1000);
             
             // Re-run after AJAX content loads
             $(document).ajaxComplete(function() {
