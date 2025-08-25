@@ -44,6 +44,113 @@ if (!defined('LEARNDASH_LESSON_VIDEO')) {
 // Video content processing disabled to allow native LearnDash LD30 display
 // The mu-plugin learndash-video handles video integration properly
 
+// Translate LearnDash "Expand All" and "Collapse All" to Hebrew
+add_filter('gettext', 'translate_learndash_expand_collapse', 1, 3);
+add_filter('gettext_with_context', 'translate_learndash_expand_collapse_with_context', 1, 4);
+add_filter('ngettext', 'translate_learndash_expand_collapse_plural', 1, 5);
+
+// Add JavaScript translation for dynamically loaded content
+add_action('wp_footer', 'add_expand_all_translation_js');
+
+function translate_learndash_expand_collapse($translated_text, $text, $domain) {
+    // Catch all instances regardless of domain
+    switch ($text) {
+        case 'Expand All':
+            error_log("Translating 'Expand All' to Hebrew (domain: $domain)");
+            return 'הרחב הכל';
+        case 'Collapse All':
+            error_log("Translating 'Collapse All' to Hebrew (domain: $domain)");
+            return 'כווץ הכל';
+    }
+    return $translated_text;
+}
+
+function add_expand_all_translation_js() {
+    if (is_singular('sfwd-courses')) {
+        ?>
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Function to translate expand/collapse buttons
+            function translateExpandButtons() {
+                // Target all expand/collapse button text
+                const expandButtons = document.querySelectorAll('.ld-expand-button .ld-text');
+                expandButtons.forEach(function(button) {
+                    if (button.textContent.trim() === 'Expand All') {
+                        button.textContent = 'הרחב הכל';
+                        console.log('Translated Expand All to Hebrew');
+                    }
+                    if (button.textContent.trim() === 'Collapse All') {
+                        button.textContent = 'כווץ הכל';
+                        console.log('Translated Collapse All to Hebrew');
+                    }
+                });
+                
+                // Also update data attributes
+                const expandButtonElements = document.querySelectorAll('.ld-expand-button[data-ld-expand-text="Expand All"]');
+                expandButtonElements.forEach(function(btn) {
+                    btn.setAttribute('data-ld-expand-text', 'הרחב הכל');
+                    btn.setAttribute('data-ld-collapse-text', 'כווץ הכל');
+                });
+            }
+            
+            // Run translation immediately
+            translateExpandButtons();
+            
+            // Run translation again after a delay to catch dynamically loaded content
+            setTimeout(translateExpandButtons, 1000);
+            setTimeout(translateExpandButtons, 2000);
+            
+            // Watch for DOM changes and re-translate
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                        setTimeout(translateExpandButtons, 100);
+                    }
+                });
+            });
+            
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        });
+        </script>
+        <?php
+    }
+}
+
+function translate_learndash_expand_collapse_with_context($translated_text, $text, $context, $domain) {
+    if ($text === 'Expand All' || $text === 'Collapse All') {
+        error_log("Translation with context filter called: text='$text', context='$context', domain='$domain'");
+    }
+    
+    if ($domain === 'learndash' || empty($domain)) {
+        switch ($text) {
+            case 'Expand All':
+                return 'הרחב הכל';
+            case 'Collapse All':
+                return 'כווץ הכל';
+        }
+    }
+    return $translated_text;
+}
+
+function translate_learndash_expand_collapse_plural($translated_text, $single, $plural, $number, $domain) {
+    if ($single === 'Expand All' || $single === 'Collapse All') {
+        error_log("Translation plural filter called: single='$single', domain='$domain'");
+    }
+    
+    if ($domain === 'learndash' || empty($domain)) {
+        switch ($single) {
+            case 'Expand All':
+                return 'הרחב הכל';
+            case 'Collapse All':
+                return 'כווץ הכל';
+        }
+    }
+    return $translated_text;
+}
+
 // Fix for LearnDash WooCommerce translation loading issue
 add_action('init', function() {
     // Only proceed if we're not in admin or doing AJAX
