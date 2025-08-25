@@ -19,10 +19,18 @@ add_action('wp_enqueue_scripts', function() {
         $css = '
         /* Back to course button styles */
         .lilac-back-to-course-wrapper {
-            position: fixed;
-            bottom: 20px;
-            left: 20px;
-            z-index: 9999;
+            position: relative;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        /* For quiz pages, position at top */
+        body.single-sfwd-quiz .lilac-back-to-course-wrapper {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            margin: 0;
+            z-index: 100;
         }
         
         .continue-button:hover {
@@ -57,10 +65,10 @@ function lilac_add_back_to_course_button($content = '') {
     $course_url = get_permalink($course_id);
     $course_title = get_the_title($course_id);
     
-    // Generate button HTML with updated styling to match 'המשך ללמוד' button
+    // Generate button HTML with proper positioning
     $button = sprintf(
-        '<div class="lilac-back-to-course-wrapper" style="position: fixed; bottom: 20px; left: 20px; z-index: 1000;">
-            <a href="%s" class="continue-button" title="%s" style="display: inline-block; padding: 6px 12px; border-radius: 4px; background-color: #28a745; color: #fff; text-decoration: none; border: 1px solid #28a745; font-size: 14px; font-weight: 500; transition: all 0.3s ease;">
+        '<div class="lilac-back-to-course-wrapper">
+            <a href="%s" class="continue-button" title="%s" style="display: inline-block; padding: 8px 16px; border-radius: 4px; background-color: #28a745; color: #fff; text-decoration: none; border: 1px solid #28a745; font-size: 14px; font-weight: 500; transition: all 0.3s ease;">
                 <span>← חזרה לקורס</span>
             </a>
         </div>',
@@ -86,6 +94,14 @@ add_action('learndash-content-tabs-before', 'lilac_add_back_to_course_button');
 add_action('learndash-topic-before', 'lilac_add_back_to_course_button');
 add_action('learndash-lesson-before', 'lilac_add_back_to_course_button');
 add_action('learndash-quiz-before', 'lilac_add_back_to_course_button');
+
+// For quiz pages specifically, add to content filter to ensure proper placement
+add_filter('the_content', function($content) {
+    if (is_singular('sfwd-quiz')) {
+        return lilac_add_back_to_course_button($content);
+    }
+    return $content;
+}, 5);
 
 // Remove footer addition to prevent duplicates
 
