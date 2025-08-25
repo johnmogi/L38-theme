@@ -144,6 +144,103 @@ class User_Dashboard_Shortcode {
     }
 
     /**
+     * Check if user should see teacher quiz link
+     * Only for course 898, תעבורתי courses, or school group students
+     *
+     * @return bool
+     */
+    private function should_show_teacher_quiz() {
+        if (!is_user_logged_in()) {
+            return false;
+        }
+
+        $user_id = get_current_user_id();
+        
+        // Check if user is enrolled in course 898
+        if (sfwd_lms_has_access(898, $user_id)) {
+            return true;
+        }
+        
+        // Check if user is enrolled in any course with "תעבורתי" in the title
+        $user_courses = learndash_user_get_enrolled_courses($user_id);
+        foreach ($user_courses as $course_id) {
+            $course = get_post($course_id);
+            if ($course && strpos($course->post_title, 'תעבורתי') !== false) {
+                return true;
+            }
+        }
+        
+        // Check if user is part of a school class (has teacher assignment)
+        if ($this->get_student_teacher_id()) {
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * Get user's primary course name for dynamic display
+     *
+     * @return string
+     */
+    private function get_user_primary_course_name() {
+        if (!is_user_logged_in()) {
+            return 'חינוך תעבורתי'; // Default fallback
+        }
+
+        $user_id = get_current_user_id();
+        
+        // Get user's enrolled courses
+        $user_courses = learndash_user_get_enrolled_courses($user_id);
+        
+        if (empty($user_courses)) {
+            return 'חינוך תעבורתי'; // Default fallback
+        }
+        
+        // Priority order: תעבורתי courses first, then course 898, then first active course
+        $priority_course = null;
+        $course_898 = null;
+        $first_active = null;
+        
+        foreach ($user_courses as $course_id) {
+            $course = get_post($course_id);
+            if (!$course) continue;
+            
+            // Check if user has active access to this course
+            if (!sfwd_lms_has_access($course_id, $user_id)) {
+                continue;
+            }
+            
+            // Priority 1: Courses with "תעבורתי" in title
+            if (strpos($course->post_title, 'תעבורתי') !== false) {
+                $priority_course = $course->post_title;
+                break;
+            }
+            
+            // Priority 2: Course 898
+            if ($course_id == 898) {
+                $course_898 = $course->post_title;
+            }
+            
+            // Priority 3: First active course
+            if (!$first_active) {
+                $first_active = $course->post_title;
+            }
+        }
+        
+        // Return in priority order
+        if ($priority_course) {
+            return $priority_course;
+        } elseif ($course_898) {
+            return $course_898;
+        } elseif ($first_active) {
+            return $first_active;
+        }
+        
+        return 'חינוך תעבורתי'; // Final fallback
+    }
+
+    /**
      * Get quizzes created by a specific teacher
      *
      * @param int $teacher_id Teacher user ID
@@ -392,6 +489,14 @@ class User_Dashboard_Shortcode {
         // Get vehicle type text
         $vehicle_text = $this->get_vehicle_type_text($atts['vehicle_type']);
         
+        // Get dynamic course name
+        $dynamic_course_name = $this->get_user_primary_course_name();
+        
+        // Override track_name with dynamic course name if not explicitly set
+        if ($atts['track_name'] === $this->defaults['track_name']) {
+            $atts['track_name'] = $dynamic_course_name;
+        }
+        
         // Prepare welcome text
         $welcome_text = sprintf($atts['welcome_text'], $this->get_user_full_name());
 
@@ -480,7 +585,7 @@ class User_Dashboard_Shortcode {
                             <span class="button-icon">📋</span>
                         </a>
                         <?php endif; ?>
-                        <?php if ($atts['show_teacher_quizzes'] === 'true') : ?>
+                        <?php if ($atts['show_teacher_quizzes'] === 'true' && $this->should_show_teacher_quiz()) : ?>
                             <?php 
                             $teacher_id = $this->get_student_teacher_id();
                             if ($teacher_id) {
