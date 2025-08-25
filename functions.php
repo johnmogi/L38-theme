@@ -938,38 +938,43 @@ function custom_override_checkout_fields($fields) {
         'clear'       => true
     );
     
-    // Remove ALL unnecessary fields
+    // Check if cart contains physical products requiring shipping
+    $needs_shipping = false;
+    if (WC()->cart && !empty(WC()->cart->get_cart())) {
+        foreach (WC()->cart->get_cart() as $cart_item) {
+            if (!$cart_item['data']->is_virtual() && !$cart_item['data']->is_downloadable()) {
+                $needs_shipping = true;
+                break;
+            }
+        }
+    }
+    
+    // Add minimal address fields - only address and city
+    $fields['billing']['billing_address_1'] = array(
+        'label'       => '',
+        'placeholder' => 'כתובת',
+        'required'    => $needs_shipping, // Required only for physical products
+        'class'       => array('form-row-first'),
+        'priority'    => 75
+    );
+    
+    $fields['billing']['billing_city'] = array(
+        'label'       => '',
+        'placeholder' => 'עיר',
+        'required'    => $needs_shipping, // Required only for physical products
+        'class'       => array('form-row-last'),
+        'priority'    => 80
+    );
+    
+    // Remove ALL other unnecessary fields
     unset($fields['billing']['billing_company']);
     unset($fields['billing']['billing_country']);
-    unset($fields['billing']['billing_address_1']);
     unset($fields['billing']['billing_address_2']);
-    unset($fields['billing']['billing_city']);
     unset($fields['billing']['billing_state']);
     unset($fields['billing']['billing_postcode']);
     unset($fields['billing']['school_code']);
     unset($fields['billing']['school_info']);
     unset($fields['billing']['class_number']);
-    
-    // Remove all address fields for virtual products
-    if (WC()->cart && !empty(WC()->cart->get_cart())) {
-        $is_virtual = true;
-        foreach (WC()->cart->get_cart() as $cart_item) {
-            if (!$cart_item['data']->is_virtual()) {
-                $is_virtual = false;
-                break;
-            }
-        }
-        
-        if ($is_virtual) {
-            unset($fields['billing']['billing_company']);
-            unset($fields['billing']['billing_country']);
-            unset($fields['billing']['billing_address_1']);
-            unset($fields['billing']['billing_address_2']);
-            unset($fields['billing']['billing_city']);
-            unset($fields['billing']['billing_state']);
-            unset($fields['billing']['billing_postcode']);
-        }
-    }
     
     return $fields;
 }
