@@ -2093,6 +2093,7 @@ require_once get_stylesheet_directory() . '/includes/users/class-user-dashboard-
 
 // Include LearnDash navigation enhancements
 require_once get_stylesheet_directory() . '/includes/learndash/back-to-course-button.php';
+require_once get_stylesheet_directory() . '/includes/learndash/navigation-enhancements.php';
 
 // Load Learndash Dashboard Widget
 if (file_exists(get_stylesheet_directory() . '/inc/widgets/LearndashDashboard/LearndashDashboard.php')) {
