@@ -2089,8 +2089,10 @@ add_filter( 'script_loader_src', 'remove_css_js_version_query', 9999 );
 require_once get_stylesheet_directory() . '/includes/users/custom-user-redirects.php';
 
 // Load registration code functionality
-require_once get_stylesheet_directory() . '/includes/core/registration-functions.php';
 require_once get_stylesheet_directory() . '/includes/users/class-user-dashboard-shortcode.php';
+
+// Include LearnDash navigation enhancements
+require_once get_stylesheet_directory() . '/includes/learndash/back-to-course-button.php';
 
 // Load Learndash Dashboard Widget
 if (file_exists(get_stylesheet_directory() . '/inc/widgets/LearndashDashboard/LearndashDashboard.php')) {

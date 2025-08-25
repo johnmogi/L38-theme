@@ -397,8 +397,52 @@ class User_Dashboard_Shortcode {
      * @return string HTML output
      */
     private function render_course_access_status($access_info) {
-        if (empty($access_info['active_courses']) && empty($access_info['expired_courses'])) {
+        // Always show the section if user is logged in, even without course data
+        if (!is_user_logged_in()) {
             return '';
+        }
+        
+        // For debugging - let's always show something
+        if (empty($access_info['active_courses']) && empty($access_info['expired_courses'])) {
+            // Show a basic subscription prompt for users without course access
+            ob_start();
+            ?>
+            <div class="course-access-section">
+                <div class="column-header">
+                    <h3>מצב גישה לקורסים</h3>
+                </div>
+                
+                <div class="access-notice no-access-notice">
+                    <h4>🎯 התחל ללמוד עכשיו!</h4>
+                    <p>עדיין אין לך גישה לקורסים? בחר את הקורס המתאים לך והתחל ללמוד היום!</p>
+                    
+                    <div class="purchase-incentive-box">
+                        <div class="incentive-content">
+                            <div class="incentive-icon">📚</div>
+                            <div class="incentive-text">
+                                <h5>קבל גישה מלאה לכל החומרים</h5>
+                                <p>מבחני תרגול, חומר לימוד מקיף ותמיכה מלאה</p>
+                            </div>
+                        </div>
+                        
+                        <div class="incentive-actions">
+                            <a href="<?php echo esc_url(wc_get_page_permalink('shop')); ?>" class="incentive-button">
+                                🛒 עבור לחנות
+                            </a>
+                        </div>
+                        
+                        <div class="incentive-benefits">
+                            <ul>
+                                <li>✅ גישה מיידית לכל החומרים</li>
+                                <li>✅ מבחני תרגול ללא הגבלה</li>
+                                <li>✅ תמיכה טכנית מלאה</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php
+            return ob_get_clean();
         }
 
         ob_start();
@@ -541,51 +585,46 @@ class User_Dashboard_Shortcode {
             <?php echo $this->render_course_access_status($access_info); ?>
             
             <div class="dashboard-content">
-                <div class="dashboard-columns" style="display: flex; flex-wrap: wrap; margin: 0 -10px;">
-                    <!-- Left Column - User Info and Practice Tests -->
-                    <div class="dashboard-column" style="flex: 0 0 50%; max-width: 50%; padding: 0 10px; box-sizing: border-box;">
+                <div class="dashboard-columns <?php echo current_user_can('administrator') ? 'three-columns' : ''; ?>">
+                    <!-- Left Column - User Info -->
+                    <div class="dashboard-column">
                         <div class="user-info">
                             <h2><?php echo esc_html($welcome_text); ?></h2>
-                            <p class="current-date"><?php echo esc_html($this->get_current_date()); ?></p>
                         
-                            <?php if ($atts['show_account_edit'] === 'true') : ?>
-                                <?php if ($atts['account_edit_as_dropdown'] === 'true') : ?>
-                                    <div class="account-dropdown">
-                                        <button class="account-dropbtn">
-                                            <span class="link-icon">👤</span>
-                                            <span class="link-text">ערוך חשבון</span>
-                                            <span class="dropdown-arrow">▼</span>
-                                        </button>
-                                        <div class="account-dropdown-content">
-                                            <a href="#" class="user-action-link">
-                                                <span class="link-icon">⚙️</span>
-                                                <span class="link-text">הגדרות חשבון</span>
-                                            </a>
-                                            <a href="#" class="user-action-link">
-                                                <span class="link-icon">🔒</span>
-                                                <span class="link-text">שנה סיסמה</span>
+                            <!-- Active Course Section -->
+                            <div class="course-subject-section">
+                                <div class="course-subject-header">
+                                    <h4>נושא לימוד</h4>
+                                </div>
+                                <div class="course-subject-content">
+                                    <?php
+                                    // Get user's active course
+                                    $user_courses = learndash_user_get_enrolled_courses(get_current_user_id());
+                                    if (!empty($user_courses)) {
+                                        $course_id = $user_courses[0]; // Get first active course
+                                        $course_title = get_the_title($course_id);
+                                        $course_url = get_permalink($course_id);
+                                        ?>
+                                        <div class="active-course-info">
+                                            <a href="<?php echo esc_url($course_url); ?>" class="course-title-link">
+                                                <div class="course-title-strong"><?php echo esc_html($course_title); ?></div>
                                             </a>
                                         </div>
-                                    </div>
-                                <?php else : ?>
-                                    <a href="#" class="user-action-link account-edit">
-                                        <span class="link-icon">👤</span>
-                                        <span class="link-text">ערוך חשבון</span>
-                                    </a>
-                                <?php endif; ?>
-                            <?php endif; ?>
-                            
-                            <?php if ($atts['show_logout'] === 'true') : ?>
-                            <a href="<?php echo esc_url(wp_logout_url(home_url())); ?>" class="user-action-link logout">
+                                    <?php } else { ?>
+                                        <p class="no-course-message">אין קורס פעיל כרגע</p>
+                                    <?php } ?>
+                                </div>
+                            </div>
+                        
+                            <a href="<?php echo wp_logout_url(home_url()); ?>" class="user-action-link logout">
                                 <span class="link-icon">🚪</span>
                                 <span class="link-text">התנתק</span>
                             </a>
-                            <?php endif; ?>
                         </div>
                     </div>
 
                     <!-- Right Column - Practice Tests -->
-                    <div class="dashboard-column" style="flex: 0 0 50%; max-width: 50%; padding: 0 10px; box-sizing: border-box;">
+                    <div class="dashboard-column">
                         <!-- Practice Tests -->
                         <?php if ($atts['show_practice'] === 'true' || $atts['show_real_test'] === 'true' || $atts['show_teacher_quizzes'] === 'true') : ?>
                         <div class="test-column">
@@ -664,6 +703,42 @@ class User_Dashboard_Shortcode {
                             </div>
                         <?php endif; ?>
                     </div>
+
+                    <!-- Third Column - Study Materials (for admins) -->
+                    <?php if (current_user_can('administrator')) : ?>
+                    <div class="dashboard-column">
+                        <div class="study-materials-column">
+                            <div class="column-header">
+                                <h3>חומר לימוד</h3>
+                            </div>
+                            <div class="button-group">
+                                <?php 
+                                $study_materials_url = !empty($atts['study_materials_url']) ? $atts['study_materials_url'] : home_url('/study-materials/');
+                                ?>
+                                <a href="<?php echo esc_url($study_materials_url); ?>" class="dashboard-button study-materials-button">
+                                    <span class="button-text">חומר לימוד לפי נושאים</span>
+                                    <span class="button-icon">📚</span>
+                                </a>
+                                
+                                <?php 
+                                $topic_tests_url = !empty($atts['topic_tests_url']) ? $atts['topic_tests_url'] : home_url('/topic-tests/');
+                                ?>
+                                <a href="<?php echo esc_url($topic_tests_url); ?>" class="dashboard-button topic-tests-button">
+                                    <span class="button-text">מבחנים לפי נושאים</span>
+                                    <span class="button-icon">📝</span>
+                                </a>
+                                
+                                <?php 
+                                $safety_materials_url = !empty($atts['safety_materials_url']) ? $atts['safety_materials_url'] : home_url('/safety-materials/');
+                                ?>
+                                <a href="<?php echo esc_url($safety_materials_url); ?>" class="dashboard-button safety-button">
+                                    <span class="button-text">זהירות בדרכים</span>
+                                    <span class="button-icon">⚠️</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -675,17 +750,23 @@ class User_Dashboard_Shortcode {
         
         <style>
         /* Dashboard Layout Styles */
-        .dashboard-columns {
-            display: flex;
-            flex-wrap: wrap;
-            margin: 0 -10px;
+        .dashboard-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
             width: 100%;
         }
         
+        .three-columns .dashboard-content {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+        
+        .dashboard-columns {
+            display: contents;
+        }
+        
         .dashboard-column {
-            flex: 0 0 50%;
-            max-width: 50%;
-            padding: 0 10px;
+            padding: 0;
             box-sizing: border-box;
         }
         
@@ -705,11 +786,70 @@ class User_Dashboard_Shortcode {
             font-weight: 500;
         }
         
+        /* Course Subject Section Styles */
+        .course-subject-section {
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #4a90e2;
+        }
+        
+        .course-subject-section h4 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .current-course-info {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .course-title {
+            font-weight: 500;
+            color: #555;
+            font-size: 14px;
+        }
+        
+        .course-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            color: #4a90e2;
+            text-decoration: none;
+            font-size: 13px;
+            opacity: 0.7;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+        
+        .course-link:hover {
+            color: #357abd;
+        }
+        
+        /* Future: Enable when user content view changes are allowed */
+        .course-link.enabled {
+            opacity: 1;
+            cursor: pointer;
+            pointer-events: auto;
+        }
+        
+        /* Support for 3+ columns when needed */
+        .dashboard-content.three-columns {
+            grid-template-columns: 1fr 1fr 1fr;
+        }
+        
         @media (max-width: 768px) {
-            .dashboard-column {
-                flex: 0 0 100%;
-                max-width: 100%;
-                margin-bottom: 20px;
+            .dashboard-content {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+            
+            .dashboard-content.three-columns {
+                grid-template-columns: 1fr;
             }
         }
         
