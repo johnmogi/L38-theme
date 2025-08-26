@@ -2088,12 +2088,19 @@ add_filter( 'script_loader_src', 'remove_css_js_version_query', 9999 );
 // Load custom user functionality
 require_once get_stylesheet_directory() . '/includes/users/custom-user-redirects.php';
 
-// Load registration code functionality
+// Load registration code functionality (with safety check)
+if (file_exists(get_stylesheet_directory() . '/includes/core/registration-functions.php')) {
+    require_once get_stylesheet_directory() . '/includes/core/registration-functions.php';
+}
 require_once get_stylesheet_directory() . '/includes/users/class-user-dashboard-shortcode.php';
 
-// Include LearnDash navigation enhancements
-require_once get_stylesheet_directory() . '/includes/learndash/back-to-course-button.php';
-require_once get_stylesheet_directory() . '/includes/learndash/navigation-enhancements.php';
+// Include LearnDash navigation enhancements (with safety checks for production)
+if (file_exists(get_stylesheet_directory() . '/includes/learndash/back-to-course-button.php')) {
+    require_once get_stylesheet_directory() . '/includes/learndash/back-to-course-button.php';
+}
+if (file_exists(get_stylesheet_directory() . '/includes/learndash/navigation-enhancements.php')) {
+    require_once get_stylesheet_directory() . '/includes/learndash/navigation-enhancements.php';
+}
 
 // Load Learndash Dashboard Widget
 if (file_exists(get_stylesheet_directory() . '/inc/widgets/LearndashDashboard/LearndashDashboard.php')) {
