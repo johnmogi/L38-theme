@@ -209,7 +209,14 @@ function lilac_navigation_enhancement_script() {
                                 courseId = courseMatch[1];
                             }
                             
+                            console.log('Current Post ID:', currentPostId, 'Course ID:', courseId);
+                            
                             if (courseId && currentPostId) {
+                                // Show loading state
+                                var originalText = $button.text();
+                                $button.text('טוען...');
+                                $button.prop('disabled', true);
+                                
                                 $.ajax({
                                     url: '<?php echo admin_url('admin-ajax.php'); ?>',
                                     type: 'POST',
@@ -220,17 +227,61 @@ function lilac_navigation_enhancement_script() {
                                         nonce: '<?php echo wp_create_nonce('lilac_navigation'); ?>'
                                     },
                                     success: function(response) {
-                                        console.log('AJAX response:', response);
-                                        if (response.success && response.data.next_url) {
+                                        console.log('=== NAVIGATION DEBUG ===');
+                                        console.log('Full AJAX response:', response);
+                                        
+                                        if (response.success) {
+                                            console.log('Next URL:', response.data.next_url);
+                                            console.log('Next Title:', response.data.next_title);
+                                            
+                                            if (response.data.debug) {
+                                                console.log('=== COURSE STRUCTURE DEBUG ===');
+                                                console.log('Course ID:', response.data.debug.course_id);
+                                                console.log('Current Post:', response.data.debug.current_post_title, '(ID: ' + response.data.debug.current_post_id + ')');
+                                                console.log('Post Type:', response.data.debug.current_post_type);
+                                                
+                                                if (response.data.debug.lesson_topics) {
+                                                    console.log('=== LESSON TOPICS ===');
+                                                    response.data.debug.lesson_topics.forEach(function(topic, index) {
+                                                        console.log((index + 1) + '. ' + topic.title + ' (ID: ' + topic.ID + ')');
+                                                        console.log('   Permalink: ' + topic.permalink);
+                                                        console.log('   Clean URL: ' + topic.clean_url);
+                                                    });
+                                                }
+                                                
+                                                if (response.data.debug.course_steps) {
+                                                    console.log('=== COURSE STEPS ===');
+                                                    response.data.debug.course_steps.forEach(function(step, index) {
+                                                        console.log((index + 1) + '. ' + step.title + ' (' + step.type + ', ID: ' + step.ID + ')');
+                                                    });
+                                                }
+                                            }
+                                            
+                                            // Navigate to next step
                                             window.location.href = response.data.next_url;
                                         } else {
-                                            console.log('No next step found, staying on current page');
+                                            console.log('Navigation failed:', response.data ? response.data.message : 'Unknown error');
+                                            if (response.data && response.data.debug) {
+                                                console.log('Debug info:', response.data.debug);
+                                            }
+                                            
+                                            // Restore button
+                                            $button.text(originalText);
+                                            $button.prop('disabled', false);
                                         }
                                     },
                                     error: function(xhr, status, error) {
                                         console.log('AJAX error:', error);
+                                        console.log('Status:', status);
+                                        console.log('Response:', xhr.responseText);
+                                        
+                                        // Restore button
+                                        $button.text(originalText);
+                                        $button.prop('disabled', false);
                                     }
                                 });
+                            } else {
+                                console.log('Missing course ID or post ID');
                             }
                         });
                     }
@@ -279,7 +330,7 @@ function lilac_navigation_enhancement_script() {
 }
 
 /**
- * AJAX handler to get next step in course (lesson or topic)
+ * AJAX handler to get next step in course (lesson or topic) with debugging
  */
 add_action('wp_ajax_lilac_get_next_step', 'lilac_handle_get_next_step');
 add_action('wp_ajax_nopriv_lilac_get_next_step', 'lilac_handle_get_next_step');
@@ -296,22 +347,41 @@ function lilac_handle_get_next_step() {
         wp_send_json_error('Missing required parameters');
     }
     
+    // Debug information
+    $debug_info = [
+        'course_id' => $course_id,
+        'current_post_id' => $current_post_id,
+        'current_post_type' => get_post_type($current_post_id),
+        'current_post_title' => get_the_title($current_post_id)
+    ];
+    
     // Get the current post type
     $current_post_type = get_post_type($current_post_id);
     
     // If we're in a topic, find the next topic in the same lesson first
     if ($current_post_type === 'sfwd-topic') {
         $lesson_id = learndash_course_get_single_parent_step($course_id, $current_post_id, 'sfwd-lessons');
+        $debug_info['parent_lesson_id'] = $lesson_id;
+        
         if ($lesson_id) {
             $lesson_topics = learndash_get_topic_list($lesson_id, $course_id);
+            $debug_info['lesson_topics'] = array_map(function($topic) {
+                return [
+                    'ID' => $topic->ID,
+                    'title' => get_the_title($topic->ID),
+                    'permalink' => get_permalink($topic->ID),
+                    'clean_url' => home_url('?p=' . $topic->ID)
+                ];
+            }, $lesson_topics);
             
             $found_current = false;
             foreach ($lesson_topics as $topic) {
                 if ($found_current) {
-                    // Found next topic in same lesson
+                    // Found next topic in same lesson - use clean URL
                     wp_send_json_success([
-                        'next_url' => get_permalink($topic->ID),
-                        'next_title' => get_the_title($topic->ID)
+                        'next_url' => home_url('?p=' . $topic->ID),
+                        'next_title' => get_the_title($topic->ID),
+                        'debug' => $debug_info
                     ]);
                 }
                 if ($topic->ID == $current_post_id) {
@@ -327,6 +397,15 @@ function lilac_handle_get_next_step() {
         wp_send_json_error('No course steps found');
     }
     
+    $debug_info['course_steps'] = [];
+    foreach ($course_steps as $step_id => $step) {
+        $debug_info['course_steps'][] = [
+            'ID' => $step_id,
+            'type' => get_post_type($step_id),
+            'title' => get_the_title($step_id)
+        ];
+    }
+    
     $found_current = false;
     foreach ($course_steps as $step_id => $step) {
         if ($found_current) {
@@ -337,14 +416,16 @@ function lilac_handle_get_next_step() {
                 if (!empty($next_lesson_topics)) {
                     $first_topic = reset($next_lesson_topics);
                     wp_send_json_success([
-                        'next_url' => get_permalink($first_topic->ID),
-                        'next_title' => get_the_title($first_topic->ID)
+                        'next_url' => home_url('?p=' . $first_topic->ID),
+                        'next_title' => get_the_title($first_topic->ID),
+                        'debug' => $debug_info
                     ]);
                 } else {
-                    // No topics, go to lesson itself
+                    // No topics, go to lesson itself - use clean URL
                     wp_send_json_success([
-                        'next_url' => get_permalink($step_id),
-                        'next_title' => get_the_title($step_id)
+                        'next_url' => home_url('?p=' . $step_id),
+                        'next_title' => get_the_title($step_id),
+                        'debug' => $debug_info
                     ]);
                 }
                 break;
@@ -357,7 +438,10 @@ function lilac_handle_get_next_step() {
         }
     }
     
-    wp_send_json_error('No next step found');
+    wp_send_json_error([
+        'message' => 'No next step found',
+        'debug' => $debug_info
+    ]);
 }
 
 /**
