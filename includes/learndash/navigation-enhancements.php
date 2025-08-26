@@ -153,11 +153,12 @@ function lilac_navigation_enhancement_script() {
             function enhanceNavigationButtons() {
                 console.log('Running enhanceNavigationButtons');
                 
-                // Find buttons with "המבחן הבא" text and change to next lesson
-                // Look for both direct text and text within spans
+                // Find buttons with "המבחן הבא" text and change to next lesson/topic
                 var nextButtons = $('a').filter(function() {
                     return $(this).text().trim() === 'המבחן הבא' || 
-                           $(this).find('.ld-text').text().trim() === 'המבחן הבא';
+                           $(this).find('.ld-text').text().trim() === 'המבחן הבא' ||
+                           $(this).text().trim() === 'השיעור הבא' || 
+                           $(this).find('.ld-text').text().trim() === 'השיעור הבא';
                 });
                 
                 console.log('Found next buttons:', nextButtons.length);
@@ -168,46 +169,52 @@ function lilac_navigation_enhancement_script() {
                     
                     console.log('Processing button with href:', href);
                     
-                    // If this links to a quiz, we need to find the next lesson instead
-                    if (href && (href.includes('quiz') || href.includes('המבחן'))) {
-                        console.log('Button links to quiz, modifying...');
+                    // Check if this button leads to same page (navigation issue)
+                    var currentUrl = window.location.href;
+                    var buttonUrl = href;
+                    
+                    // If button leads to same page or to a quiz when we want next topic
+                    if (buttonUrl === currentUrl || (href && href.includes('quiz'))) {
+                        console.log('Button has navigation issue, fixing...');
                         
-                        // Change button text - handle both direct text and span structure
+                        // Change button text based on context
                         var $textSpan = $button.find('.ld-text');
-                        if ($textSpan.length) {
-                            $textSpan.text('השיעור הבא');
-                        } else {
-                            $button.text('השיעור הבא');
+                        var newText = 'הנושא הבא'; // Default for topics
+                        
+                        // If we're in a topic, next should be next topic or lesson
+                        if (currentUrl.includes('/topics/')) {
+                            newText = 'הנושא הבא';
+                        } else if (currentUrl.includes('/lessons/')) {
+                            newText = 'השיעור הבא';
                         }
                         
-                        // Remove any existing click handlers
-                        $button.off('click.lilac-nav');
+                        if ($textSpan.length) {
+                            $textSpan.text(newText);
+                        } else {
+                            $button.text(newText);
+                        }
                         
-                        // Add click handler to navigate to next lesson
+                        // Remove existing handlers and add new one
+                        $button.off('click.lilac-nav');
                         $button.on('click.lilac-nav', function(e) {
                             e.preventDefault();
-                            console.log('Next lesson button clicked');
+                            console.log('Navigation button clicked, finding next step...');
                             
-                            // Get current post ID from body classes or global variable
                             var currentPostId = <?php echo get_the_ID(); ?>;
                             var courseId = null;
                             
-                            // Try to extract course ID from body classes
                             var bodyClasses = $('body').attr('class');
                             var courseMatch = bodyClasses.match(/learndash-cpt-sfwd-courses-(\d+)-parent/);
                             if (courseMatch) {
                                 courseId = courseMatch[1];
                             }
                             
-                            console.log('Course ID:', courseId, 'Current Post ID:', currentPostId);
-                            
                             if (courseId && currentPostId) {
-                                // Make AJAX call to get next lesson
                                 $.ajax({
                                     url: '<?php echo admin_url('admin-ajax.php'); ?>',
                                     type: 'POST',
                                     data: {
-                                        action: 'lilac_get_next_lesson',
+                                        action: 'lilac_get_next_step',
                                         course_id: courseId,
                                         current_post_id: currentPostId,
                                         nonce: '<?php echo wp_create_nonce('lilac_navigation'); ?>'
@@ -217,43 +224,19 @@ function lilac_navigation_enhancement_script() {
                                         if (response.success && response.data.next_url) {
                                             window.location.href = response.data.next_url;
                                         } else {
-                                            // Fallback: try to find next topic in the same lesson
-                                            var fallbackUrl = href.replace(/\/quizzes\/.*/, '/');
-                                            if (fallbackUrl !== href) {
-                                                window.location.href = fallbackUrl;
-                                            } else {
-                                                // Last resort: go to course page
-                                                window.location.href = '/courses/קורס-מקוון-לרכב-פרטי/';
-                                            }
+                                            console.log('No next step found, staying on current page');
                                         }
                                     },
                                     error: function(xhr, status, error) {
                                         console.log('AJAX error:', error);
-                                        // Fallback: try to find next topic in the same lesson
-                                        var fallbackUrl = href.replace(/\/quizzes\/.*/, '/');
-                                        if (fallbackUrl !== href) {
-                                            window.location.href = fallbackUrl;
-                                        } else {
-                                            // Last resort: go to course page
-                                            window.location.href = '/courses/קורס-מקוון-לרכב-פרטי/';
-                                        }
                                     }
                                 });
-                            } else {
-                                console.log('Missing course ID or post ID, using fallback');
-                                // Fallback navigation
-                                var fallbackUrl = href.replace(/\/quizzes\/.*/, '/');
-                                if (fallbackUrl !== href) {
-                                    window.location.href = fallbackUrl;
-                                } else {
-                                    window.location.href = '/courses/קורס-מקוון-לרכב-פרטי/';
-                                }
                             }
                         });
                     }
                 });
                 
-                // Only target navigation buttons in the content actions area
+                // Fix back buttons - change text and ensure proper styling
                 var backButtons = $('.ld-content-actions a').filter(function() {
                     return $(this).text().indexOf('חזרה') !== -1;
                 });
@@ -262,8 +245,20 @@ function lilac_navigation_enhancement_script() {
                 
                 backButtons.each(function() {
                     var $button = $(this);
-                    console.log('Styling back button in content actions');
-                    // CSS will handle the styling, just ensure it's properly targeted
+                    console.log('Processing back button');
+                    
+                    // Change text from "חזרה לשיעור" to "חזרה לפרק"
+                    var currentText = $button.text().trim();
+                    if (currentText.includes('חזרה לשיעור')) {
+                        $button.text('חזרה לפרק');
+                    }
+                    
+                    // Ensure proper styling
+                    $button.css({
+                        'font-size': '16px',
+                        'padding': '10px 20px',
+                        'min-width': '120px'
+                    });
                 });
             }
             
@@ -284,11 +279,11 @@ function lilac_navigation_enhancement_script() {
 }
 
 /**
- * AJAX handler to get next lesson in course
+ * AJAX handler to get next step in course (lesson or topic)
  */
-add_action('wp_ajax_lilac_get_next_lesson', 'lilac_ajax_get_next_lesson');
-add_action('wp_ajax_nopriv_lilac_get_next_lesson', 'lilac_ajax_get_next_lesson');
-function lilac_ajax_get_next_lesson() {
+add_action('wp_ajax_lilac_get_next_step', 'lilac_handle_get_next_step');
+add_action('wp_ajax_nopriv_lilac_get_next_step', 'lilac_handle_get_next_step');
+function lilac_handle_get_next_step() {
     // Verify nonce
     if (!wp_verify_nonce($_POST['nonce'], 'lilac_navigation')) {
         wp_die('Security check failed');
@@ -298,40 +293,75 @@ function lilac_ajax_get_next_lesson() {
     $current_post_id = intval($_POST['current_post_id']);
     
     if (!$course_id || !$current_post_id) {
-        wp_send_json_error('Invalid parameters');
+        wp_send_json_error('Missing required parameters');
     }
     
-    // Get course steps
+    // Get the current post type
+    $current_post_type = get_post_type($current_post_id);
+    
+    // If we're in a topic, find the next topic in the same lesson first
+    if ($current_post_type === 'sfwd-topic') {
+        $lesson_id = learndash_course_get_single_parent_step($course_id, $current_post_id, 'sfwd-lessons');
+        if ($lesson_id) {
+            $lesson_topics = learndash_get_topic_list($lesson_id, $course_id);
+            
+            $found_current = false;
+            foreach ($lesson_topics as $topic) {
+                if ($found_current) {
+                    // Found next topic in same lesson
+                    wp_send_json_success([
+                        'next_url' => get_permalink($topic->ID),
+                        'next_title' => get_the_title($topic->ID)
+                    ]);
+                }
+                if ($topic->ID == $current_post_id) {
+                    $found_current = true;
+                }
+            }
+        }
+    }
+    
+    // If no next topic found, or we're in a lesson, find next lesson
     $course_steps = learndash_get_course_steps($course_id);
     if (empty($course_steps)) {
         wp_send_json_error('No course steps found');
     }
     
-    // Find next lesson/topic
-    $next_step_id = null;
     $found_current = false;
-    
     foreach ($course_steps as $step_id => $step) {
         if ($found_current) {
-            // Skip quizzes and go to the next lesson/topic
-            $post_type = get_post_type($step_id);
-            if ($post_type === 'sfwd-lessons' || $post_type === 'sfwd-topic') {
-                $next_step_id = $step_id;
+            // Look for next lesson (skip quizzes)
+            if (get_post_type($step_id) === 'sfwd-lessons') {
+                // Get first topic of next lesson
+                $next_lesson_topics = learndash_get_topic_list($step_id, $course_id);
+                if (!empty($next_lesson_topics)) {
+                    $first_topic = reset($next_lesson_topics);
+                    wp_send_json_success([
+                        'next_url' => get_permalink($first_topic->ID),
+                        'next_title' => get_the_title($first_topic->ID)
+                    ]);
+                } else {
+                    // No topics, go to lesson itself
+                    wp_send_json_success([
+                        'next_url' => get_permalink($step_id),
+                        'next_title' => get_the_title($step_id)
+                    ]);
+                }
                 break;
             }
         }
         
-        if ($step_id == $current_post_id) {
+        if ($step_id == $current_post_id || 
+            ($current_post_type === 'sfwd-topic' && $step_id == learndash_course_get_single_parent_step($course_id, $current_post_id, 'sfwd-lessons'))) {
             $found_current = true;
         }
     }
     
-    if ($next_step_id) {
-        wp_send_json_success([
-            'next_url' => get_permalink($next_step_id),
-            'next_title' => get_the_title($next_step_id)
-        ]);
-    } else {
-        wp_send_json_error('No next lesson found');
-    }
+    wp_send_json_error('No next step found');
 }
+
+/**
+ * Legacy AJAX handler - kept for backward compatibility
+ */
+add_action('wp_ajax_lilac_get_next_lesson', 'lilac_handle_get_next_step');
+add_action('wp_ajax_nopriv_lilac_get_next_lesson', 'lilac_handle_get_next_step');
