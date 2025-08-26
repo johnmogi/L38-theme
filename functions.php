@@ -3929,14 +3929,46 @@ function fix_checkout_fields_alignment($fields) {
     return $fields;
 }
 
+// Back to Course button shortcode
+add_shortcode('back_to_course_button', function($atts) {
+    // Default values
+    $atts = shortcode_atts([
+        'course_id' => 4236,  // Default course ID
+        'text'      => 'בחזרה לקורס',  // Button text
+        'class'     => 'back-to-course-btn',  // CSS class
+        'style'     => 'display: inline-block; padding: 12px 25px; background-color: rgba(44, 51, 145, 1); color: white; text-decoration: none; border-radius: 25px; margin: 15px 0; font-weight: 600; text-align: center; transition: all 0.3s ease; box-shadow: 0 2px 5px rgba(0,0,0,0.2);'  // Inline styles
+    ], $atts);
+    
+    $course_url = get_permalink($atts['course_id']);
+    
+    // Add hover effect via inline style
+    $button_style = $atts['style'] . ' ';
+    $button_style .= '
+        <style>
+            .back-to-course-btn:hover {
+                background-color: rgba(44, 51, 145, 1) !important;
+                transform: translateY(-2px);
+                box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
+            }
+        </style>';
+    
+    return sprintf(
+        '<a href="%s" class="%s" style="%s">%s</a>',
+        esc_url($course_url),
+        esc_attr($atts['class']),
+        $button_style,
+        esc_html($atts['text'])
+    );
+});
 
-//Allow SVG upload
+// Allow SVG upload
 function cc_mime_types($mimes) {
     $mimes['svg'] = 'image/svg+xml';
     return $mimes;
-  }
-  add_filter('upload_mimes', 'cc_mime_types');
-  
+}
+add_filter('upload_mimes', 'cc_mime_types');
+
+// Add capabilities to school teacher role
   // Add capabilities to school teacher role
 add_action('admin_init', function () {
     $role = get_role('school_teacher');
