@@ -142,6 +142,7 @@ function lilac_customize_next_post_link($link, $post_id, $course_id, $user_id, $
  * Add JavaScript to enhance navigation buttons
  */
 add_action('wp_footer', 'lilac_navigation_enhancement_script');
+add_action('wp_footer', 'lilac_debug_course_structure');
 function lilac_navigation_enhancement_script() {
     if (is_singular(['sfwd-lessons', 'sfwd-topic', 'sfwd-quiz'])) {
         ?>
@@ -275,9 +276,17 @@ function lilac_navigation_enhancement_script() {
                                         console.log('Status:', status);
                                         console.log('Response:', xhr.responseText);
                                         
-                                        // Restore button
-                                        $button.text(originalText);
-                                        $button.prop('disabled', false);
+                                        // Fallback to original link if AJAX fails
+                                        console.log('AJAX failed, using original link as fallback');
+                                        var originalHref = $button.attr('href');
+                                        if (originalHref && originalHref !== '#' && originalHref !== window.location.href) {
+                                            window.location.href = originalHref;
+                                        } else {
+                                            // If no valid original link, restore button
+                                            $button.text(originalText);
+                                            $button.prop('disabled', false);
+                                            alert('Navigation failed. Please try again.');
+                                        }
                                     }
                                 });
                             } else {
@@ -337,7 +346,7 @@ add_action('wp_ajax_nopriv_lilac_get_next_step', 'lilac_handle_get_next_step');
 function lilac_handle_get_next_step() {
     // Verify nonce
     if (!wp_verify_nonce($_POST['nonce'], 'lilac_navigation')) {
-        wp_die('Security check failed');
+        wp_send_json_error('Security check failed');
     }
     
     $course_id = intval($_POST['course_id']);
@@ -358,86 +367,135 @@ function lilac_handle_get_next_step() {
     // Get the current post type
     $current_post_type = get_post_type($current_post_id);
     
-    // If we're in a topic, find the next topic in the same lesson first
-    if ($current_post_type === 'sfwd-topic') {
-        $lesson_id = learndash_course_get_single_parent_step($course_id, $current_post_id, 'sfwd-lessons');
-        $debug_info['parent_lesson_id'] = $lesson_id;
-        
-        if ($lesson_id) {
-            $lesson_topics = learndash_get_topic_list($lesson_id, $course_id);
-            $debug_info['lesson_topics'] = array_map(function($topic) {
-                return [
-                    'ID' => $topic->ID,
-                    'title' => get_the_title($topic->ID),
-                    'permalink' => get_permalink($topic->ID),
-                    'clean_url' => home_url('?p=' . $topic->ID)
-                ];
-            }, $lesson_topics);
-            
-            $found_current = false;
-            foreach ($lesson_topics as $topic) {
-                if ($found_current) {
-                    // Found next topic in same lesson - use clean URL
-                    wp_send_json_success([
-                        'next_url' => home_url('?p=' . $topic->ID),
-                        'next_title' => get_the_title($topic->ID),
-                        'debug' => $debug_info
-                    ]);
-                }
-                if ($topic->ID == $current_post_id) {
-                    $found_current = true;
-                }
-            }
-        }
-    }
-    
-    // If no next topic found, or we're in a lesson, find next lesson
+    // Get course steps using the correct LearnDash function
     $course_steps = learndash_get_course_steps($course_id);
+    
     if (empty($course_steps)) {
-        wp_send_json_error('No course steps found');
+        wp_send_json_error([
+            'message' => 'No course steps found',
+            'debug' => $debug_info
+        ]);
     }
     
-    $debug_info['course_steps'] = [];
-    foreach ($course_steps as $step_id => $step) {
-        $debug_info['course_steps'][] = [
+    // Convert course steps array to indexed array for easier processing
+    $steps_array = array_keys($course_steps);
+    $debug_info['total_steps'] = count($steps_array);
+    $debug_info['steps_list'] = [];
+    
+    foreach ($steps_array as $index => $step_id) {
+        $debug_info['steps_list'][] = [
+            'index' => $index,
             'ID' => $step_id,
             'type' => get_post_type($step_id),
             'title' => get_the_title($step_id)
         ];
     }
     
-    $found_current = false;
-    foreach ($course_steps as $step_id => $step) {
-        if ($found_current) {
-            // Look for next lesson (skip quizzes)
-            if (get_post_type($step_id) === 'sfwd-lessons') {
-                // Get first topic of next lesson
-                $next_lesson_topics = learndash_get_topic_list($step_id, $course_id);
-                if (!empty($next_lesson_topics)) {
-                    $first_topic = reset($next_lesson_topics);
+    // Find current position in course steps
+    $current_index = array_search($current_post_id, $steps_array);
+    
+    if ($current_index === false) {
+        // If current post not found directly, it might be a topic - find parent lesson
+        if ($current_post_type === 'sfwd-topic') {
+            $parent_lesson = learndash_course_get_single_parent_step($course_id, $current_post_id, 'sfwd-lessons');
+            $debug_info['parent_lesson_id'] = $parent_lesson;
+            
+            if ($parent_lesson) {
+                $current_index = array_search($parent_lesson, $steps_array);
+                
+                // Get topics for this lesson
+                $lesson_topics = learndash_get_topic_list($parent_lesson, $course_id);
+                $debug_info['lesson_topics'] = [];
+                
+                if (!empty($lesson_topics)) {
+                    foreach ($lesson_topics as $topic) {
+                        $debug_info['lesson_topics'][] = [
+                            'ID' => $topic->ID,
+                            'title' => get_the_title($topic->ID)
+                        ];
+                    }
+                    
+                    // Find next topic in same lesson
+                    $topic_ids = array_map(function($topic) { return $topic->ID; }, $lesson_topics);
+                    $current_topic_index = array_search($current_post_id, $topic_ids);
+                    
+                    if ($current_topic_index !== false && isset($topic_ids[$current_topic_index + 1])) {
+                        $next_topic_id = $topic_ids[$current_topic_index + 1];
+                        wp_send_json_success([
+                            'next_url' => home_url('?p=' . $next_topic_id),
+                            'next_title' => get_the_title($next_topic_id),
+                            'debug' => $debug_info
+                        ]);
+                    }
+                }
+            }
+        }
+    }
+    
+    $debug_info['current_index'] = $current_index;
+    
+    // If we found the current position, look for next step
+    if ($current_index !== false && isset($steps_array[$current_index + 1])) {
+        $next_step_id = $steps_array[$current_index + 1];
+        $next_step_type = get_post_type($next_step_id);
+        
+        // If next step is a lesson, get its first topic
+        if ($next_step_type === 'sfwd-lessons') {
+            $lesson_topics = learndash_get_topic_list($next_step_id, $course_id);
+            if (!empty($lesson_topics)) {
+                $first_topic = reset($lesson_topics);
+                $next_step_id = $first_topic->ID;
+            }
+        }
+        
+        wp_send_json_success([
+            'next_url' => home_url('?p=' . $next_step_id),
+            'next_title' => get_the_title($next_step_id),
+            'debug' => $debug_info
+        ]);
+    }
+    
+    // If we're at the end of current lesson but there are more lessons, go to next lesson's first topic
+    if ($current_index !== false) {
+        // Look for the next lesson after current position
+        for ($i = $current_index + 1; $i < count($steps_array); $i++) {
+            $step_id = $steps_array[$i];
+            $step_type = get_post_type($step_id);
+            
+            if ($step_type === 'sfwd-lessons') {
+                // Found next lesson, get its first topic
+                $lesson_topics = learndash_get_topic_list($step_id, $course_id);
+                if (!empty($lesson_topics)) {
+                    $first_topic = reset($lesson_topics);
                     wp_send_json_success([
                         'next_url' => home_url('?p=' . $first_topic->ID),
                         'next_title' => get_the_title($first_topic->ID),
                         'debug' => $debug_info
                     ]);
                 } else {
-                    // No topics, go to lesson itself - use clean URL
+                    // No topics in next lesson, go to lesson itself
                     wp_send_json_success([
                         'next_url' => home_url('?p=' . $step_id),
                         'next_title' => get_the_title($step_id),
                         'debug' => $debug_info
                     ]);
                 }
-                break;
             }
-        }
-        
-        if ($step_id == $current_post_id || 
-            ($current_post_type === 'sfwd-topic' && $step_id == learndash_course_get_single_parent_step($course_id, $current_post_id, 'sfwd-lessons'))) {
-            $found_current = true;
         }
     }
     
+    // If we're at the last step, return the course URL
+    $course_url = get_permalink($course_id);
+    if ($course_url) {
+        wp_send_json_success([
+            'next_url' => $course_url,
+            'next_title' => __('Back to Course', 'learndash'),
+            'is_course_complete' => true,
+            'debug' => $debug_info
+        ]);
+    }
+    
+    // If we get here, no next step was found
     wp_send_json_error([
         'message' => 'No next step found',
         'debug' => $debug_info
@@ -449,3 +507,107 @@ function lilac_handle_get_next_step() {
  */
 add_action('wp_ajax_lilac_get_next_lesson', 'lilac_handle_get_next_step');
 add_action('wp_ajax_nopriv_lilac_get_next_lesson', 'lilac_handle_get_next_step');
+
+/**
+ * Debug function to show course structure at footer
+ */
+function lilac_debug_course_structure() {
+    if (is_singular(['sfwd-lessons', 'sfwd-topic', 'sfwd-quiz'])) {
+        global $post;
+        $course_id = learndash_get_course_id($post->ID);
+        
+        if ($course_id) {
+            echo '<div style="position: fixed; bottom: 0; left: 0; right: 0; background: #000; color: #0f0; padding: 10px; font-family: monospace; font-size: 11px; max-height: 300px; overflow-y: auto; z-index: 9999; border-top: 2px solid #0f0;">';
+            echo '<h4 style="color: #ff0; margin: 0 0 10px 0;">🔍 LEARNDASH COURSE DEBUG - Course ID: ' . $course_id . '</h4>';
+            
+            // Get course main page
+            echo '<div style="color: #0ff; margin-bottom: 10px;"><strong>🏠 COURSE MAIN PAGE: <a href="' . get_permalink($course_id) . '" style="color: #0ff;">' . get_the_title($course_id) . ' (ID:' . $course_id . ')</a></strong></div>';
+            
+            // Get lessons for this course
+            $lessons = learndash_get_course_lessons_list($course_id);
+            echo '<div style="margin-bottom: 10px;"><strong>TOTAL LESSONS: ' . count($lessons) . '</strong></div>';
+            echo '<div style="margin-bottom: 10px;"><strong>CURRENT POST: ' . $post->ID . ' (' . get_post_type($post->ID) . ') - ' . get_the_title($post->ID) . '</strong></div>';
+            
+            if (!empty($lessons)) {
+                $lesson_index = 0;
+                foreach ($lessons as $lesson) {
+                    $lesson_id = $lesson['post']->ID;
+                    $lesson_title = $lesson['post']->post_title;
+                    $lesson_url = home_url('?p=' . $lesson_id);
+                    $is_current_lesson = ($lesson_id == $post->ID);
+                    
+                    $lesson_style = $is_current_lesson ? 'background: #ff0; color: #000; font-weight: bold;' : '';
+                    echo '<div style="' . $lesson_style . ' padding: 3px; margin: 2px 0;">';
+                    echo '📚 [L' . $lesson_index . '] <a href="' . $lesson_url . '" style="color: inherit; text-decoration: underline;">' . $lesson_title . ' (ID:' . $lesson_id . ')</a>';
+                    
+                    // Get topics for this lesson
+                    $topics = learndash_get_topic_list($lesson_id, $course_id);
+                    if (!empty($topics)) {
+                        echo '<div style="margin-left: 20px; font-size: 10px;">';
+                        $topic_index = 0;
+                        foreach ($topics as $topic) {
+                            $topic_id = $topic->ID;
+                            $topic_title = $topic->post_title;
+                            $topic_url = home_url('?p=' . $topic_id);
+                            $is_current_topic = ($topic_id == $post->ID);
+                            
+                            $topic_style = $is_current_topic ? 'background: #ff0; color: #000; font-weight: bold;' : '';
+                            echo '<div style="' . $topic_style . ' padding: 1px; margin: 1px 0;">└─ 📄 [T' . $topic_index . '] <a href="' . $topic_url . '" style="color: inherit; text-decoration: underline;">' . $topic_title . ' (ID:' . $topic_id . ')</a></div>';
+                            $topic_index++;
+                        }
+                        echo '</div>';
+                    }
+                    
+                    // Get quizzes for this lesson
+                    $quizzes = learndash_get_lesson_quiz_list($lesson_id, null, $course_id);
+                    if (!empty($quizzes)) {
+                        echo '<div style="margin-left: 20px; font-size: 10px; color: #f90;">';
+                        foreach ($quizzes as $quiz) {
+                            $quiz_id = $quiz['post']->ID;
+                            $quiz_title = $quiz['post']->post_title;
+                            $quiz_url = home_url('?p=' . $quiz_id);
+                            $is_current_quiz = ($quiz_id == $post->ID);
+                            
+                            $quiz_style = $is_current_quiz ? 'background: #ff0; color: #000; font-weight: bold;' : '';
+                            echo '<div style="' . $quiz_style . ' padding: 1px; margin: 1px 0;">└─ ❓ <a href="' . $quiz_url . '" style="color: inherit; text-decoration: underline;">' . $quiz_title . ' (ID:' . $quiz_id . ')</a></div>';
+                        }
+                        echo '</div>';
+                    }
+                    
+                    echo '</div>';
+                    $lesson_index++;
+                }
+                
+                // Show navigation logic
+                echo '<div style="margin-top: 10px; border-top: 1px solid #0f0; padding-top: 10px;">';
+                echo '<div style="color: #0ff;"><strong>NAVIGATION LOGIC:</strong></div>';
+                
+                if (get_post_type($post->ID) === 'sfwd-topic') {
+                    // Find current topic position and next topic
+                    $current_lesson_id = learndash_course_get_single_parent_step($course_id, $post->ID, 'sfwd-lessons');
+                    if ($current_lesson_id) {
+                        $lesson_topics = learndash_get_topic_list($current_lesson_id, $course_id);
+                        $topic_ids = array_map(function($topic) { return $topic->ID; }, $lesson_topics);
+                        $current_topic_index = array_search($post->ID, $topic_ids);
+                        
+                        echo '<div>Current lesson: ' . get_the_title($current_lesson_id) . ' (ID:' . $current_lesson_id . ')</div>';
+                        echo '<div>Topic index in lesson: ' . $current_topic_index . ' of ' . count($topic_ids) . '</div>';
+                        
+                        if (isset($topic_ids[$current_topic_index + 1])) {
+                            $next_topic_id = $topic_ids[$current_topic_index + 1];
+                            echo '<div style="color: #0f0;">NEXT TOPIC: ' . get_the_title($next_topic_id) . ' (ID:' . $next_topic_id . ') - <a href="' . home_url('?p=' . $next_topic_id) . '" style="color: #0f0;">' . home_url('?p=' . $next_topic_id) . '</a></div>';
+                        } else {
+                            echo '<div style="color: #f90;">END OF LESSON - Should find next lesson\'s first topic</div>';
+                        }
+                    }
+                }
+                
+                echo '</div>';
+            } else {
+                echo '<div style="color: #f00;">NO LESSONS FOUND!</div>';
+            }
+            
+            echo '</div>';
+        }
+    }
+}
