@@ -146,191 +146,190 @@ add_action('wp_footer', 'lilac_debug_course_structure');
 function lilac_navigation_enhancement_script() {
     if (is_singular(['sfwd-lessons', 'sfwd-topic', 'sfwd-quiz'])) {
         ?>
-        <script>
+        <script type="text/javascript">
         jQuery(document).ready(function($) {
             console.log('Lilac Navigation Enhancement Script Loaded');
             
-            // Fix navigation button text and functionality
+            // Get current post and course IDs from page
+            var currentPostId = parseInt($('body').attr('class').match(/postid-(\d+)/)?.[1] || '0');
+            var courseId = parseInt($('body').attr('class').match(/learndash-cpt-sfwd-courses-(\d+)-parent/)?.[1] || '0');
+            
+            console.log('Post ID:', currentPostId, 'Course ID:', courseId);
+            
             function enhanceNavigationButtons() {
-                console.log('Running enhanceNavigationButtons');
+                console.log('Enhancing navigation buttons');
                 
-                // Find buttons with "המבחן הבא" text and change to next lesson/topic
+                // Find ALL next navigation buttons and override them
                 var nextButtons = $('a').filter(function() {
-                    return $(this).text().trim() === 'המבחן הבא' || 
-                           $(this).find('.ld-text').text().trim() === 'המבחן הבא' ||
-                           $(this).text().trim() === 'השיעור הבא' || 
-                           $(this).find('.ld-text').text().trim() === 'השיעור הבא';
+                    var text = $(this).text().trim();
+                    var ldText = $(this).find('.ld-text').text().trim();
+                    return text.includes('הבא') || ldText.includes('הבא') || 
+                           text.includes('Next') || ldText.includes('Next') ||
+                           text.includes('מבחן') || ldText.includes('מבחן');
                 });
                 
                 console.log('Found next buttons:', nextButtons.length);
                 
                 nextButtons.each(function() {
-                    var $button = $(this);
-                    var href = $button.attr('href');
+                    var $btn = $(this);
+                    var href = $btn.attr('href');
                     
-                    console.log('Processing button with href:', href);
+                    console.log('Processing next button:', $btn.text(), 'href:', href);
                     
-                    // Check if this button leads to same page (navigation issue)
-                    var currentUrl = window.location.href;
-                    var buttonUrl = href;
+                    // Remove href to prevent default navigation
+                    $btn.removeAttr('href');
+                    $btn.css('cursor', 'pointer');
                     
-                    // If button leads to same page or to a quiz when we want next topic
-                    if (buttonUrl === currentUrl || (href && href.includes('quiz'))) {
-                        console.log('Button has navigation issue, fixing...');
-                        
-                        // Change button text based on context
-                        var $textSpan = $button.find('.ld-text');
-                        var newText = 'הנושא הבא'; // Default for topics
-                        
-                        // If we're in a topic, next should be next topic or lesson
-                        if (currentUrl.includes('/topics/')) {
-                            newText = 'הנושא הבא';
-                        } else if (currentUrl.includes('/lessons/')) {
-                            newText = 'השיעור הבא';
-                        }
-                        
-                        if ($textSpan.length) {
-                            $textSpan.text(newText);
-                        } else {
-                            $button.text(newText);
-                        }
-                        
-                        // Remove existing handlers and add new one
-                        $button.off('click.lilac-nav');
-                        $button.on('click.lilac-nav', function(e) {
-                            e.preventDefault();
-                            console.log('Navigation button clicked, finding next step...');
-                            
-                            var currentPostId = <?php echo get_the_ID(); ?>;
-                            var courseId = null;
-                            
-                            var bodyClasses = $('body').attr('class');
-                            var courseMatch = bodyClasses.match(/learndash-cpt-sfwd-courses-(\d+)-parent/);
-                            if (courseMatch) {
-                                courseId = courseMatch[1];
-                            }
-                            
-                            console.log('Current Post ID:', currentPostId, 'Course ID:', courseId);
-                            
-                            if (courseId && currentPostId) {
-                                // Show loading state
-                                var originalText = $button.text();
-                                $button.text('טוען...');
-                                $button.prop('disabled', true);
-                                
-                                $.ajax({
-                                    url: '<?php echo admin_url('admin-ajax.php'); ?>',
-                                    type: 'POST',
-                                    data: {
-                                        action: 'lilac_get_next_step',
-                                        course_id: courseId,
-                                        current_post_id: currentPostId,
-                                        nonce: '<?php echo wp_create_nonce('lilac_navigation'); ?>'
-                                    },
-                                    success: function(response) {
-                                        console.log('=== NAVIGATION DEBUG ===');
-                                        console.log('Full AJAX response:', response);
-                                        
-                                        if (response.success) {
-                                            console.log('Next URL:', response.data.next_url);
-                                            console.log('Next Title:', response.data.next_title);
-                                            
-                                            if (response.data.debug) {
-                                                console.log('=== COURSE STRUCTURE DEBUG ===');
-                                                console.log('Course ID:', response.data.debug.course_id);
-                                                console.log('Current Post:', response.data.debug.current_post_title, '(ID: ' + response.data.debug.current_post_id + ')');
-                                                console.log('Post Type:', response.data.debug.current_post_type);
-                                                
-                                                if (response.data.debug.lesson_topics) {
-                                                    console.log('=== LESSON TOPICS ===');
-                                                    response.data.debug.lesson_topics.forEach(function(topic, index) {
-                                                        console.log((index + 1) + '. ' + topic.title + ' (ID: ' + topic.ID + ')');
-                                                        console.log('   Permalink: ' + topic.permalink);
-                                                        console.log('   Clean URL: ' + topic.clean_url);
-                                                    });
-                                                }
-                                                
-                                                if (response.data.debug.course_steps) {
-                                                    console.log('=== COURSE STEPS ===');
-                                                    response.data.debug.course_steps.forEach(function(step, index) {
-                                                        console.log((index + 1) + '. ' + step.title + ' (' + step.type + ', ID: ' + step.ID + ')');
-                                                    });
-                                                }
-                                            }
-                                            
-                                            // Navigate to next step
-                                            window.location.href = response.data.next_url;
-                                        } else {
-                                            console.log('Navigation failed:', response.data ? response.data.message : 'Unknown error');
-                                            if (response.data && response.data.debug) {
-                                                console.log('Debug info:', response.data.debug);
-                                            }
-                                            
-                                            // Restore button
-                                            $button.text(originalText);
-                                            $button.prop('disabled', false);
-                                        }
-                                    },
-                                    error: function(xhr, status, error) {
-                                        console.log('AJAX error:', error);
-                                        console.log('Status:', status);
-                                        console.log('Response:', xhr.responseText);
-                                        
-                                        // Fallback to original link if AJAX fails
-                                        console.log('AJAX failed, using original link as fallback');
-                                        var originalHref = $button.attr('href');
-                                        if (originalHref && originalHref !== '#' && originalHref !== window.location.href) {
-                                            window.location.href = originalHref;
-                                        } else {
-                                            // If no valid original link, restore button
-                                            $button.text(originalText);
-                                            $button.prop('disabled', false);
-                                            alert('Navigation failed. Please try again.');
-                                        }
-                                    }
-                                });
-                            } else {
-                                console.log('Missing course ID or post ID');
-                            }
-                        });
+                    // Override ALL navigation buttons to use our AJAX logic
+                    $btn.off('click').on('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('Next button clicked, using AJAX navigation');
+                        navigateNext($btn);
+                        return false;
+                    });
+                    
+                    // Update button text immediately
+                    var $textSpan = $btn.find('.ld-text');
+                    if ($textSpan.length) {
+                        $textSpan.text('Loading next...');
+                    } else {
+                        $btn.text('Loading next...');
                     }
                 });
                 
-                // Fix back buttons - change text and ensure proper styling
-                var backButtons = $('.ld-content-actions a').filter(function() {
-                    return $(this).text().indexOf('חזרה') !== -1;
+                // Find ALL back navigation buttons and override them
+                var backButtons = $('a').filter(function() {
+                    var text = $(this).text().trim();
+                    var ldText = $(this).find('.ld-text').text().trim();
+                    return text.includes('קודם') || ldText.includes('קודם') || 
+                           text.includes('Previous') || ldText.includes('Previous');
                 });
                 
-                console.log('Found back buttons in content actions:', backButtons.length);
+                console.log('Found back buttons:', backButtons.length);
                 
                 backButtons.each(function() {
-                    var $button = $(this);
-                    console.log('Processing back button');
+                    var $btn = $(this);
+                    console.log('Processing back button:', $btn.text());
                     
-                    // Change text from "חזרה לשיעור" to "חזרה לפרק"
-                    var currentText = $button.text().trim();
-                    if (currentText.includes('חזרה לשיעור')) {
-                        $button.text('חזרה לפרק');
-                    }
+                    // Remove href to prevent default navigation
+                    $btn.removeAttr('href');
+                    $btn.css('cursor', 'pointer');
                     
-                    // Ensure proper styling
-                    $button.css({
-                        'font-size': '16px',
-                        'padding': '10px 20px',
-                        'min-width': '120px'
+                    // Override ALL back buttons to use our AJAX logic
+                    $btn.off('click').on('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('Back button clicked, using AJAX navigation');
+                        navigatePrevious($btn);
+                        return false;
                     });
+                    
+                    // Update button text immediately
+                    var $textSpan = $btn.find('.ld-text');
+                    if ($textSpan.length) {
+                        $textSpan.text('Loading previous...');
+                    } else {
+                        $btn.text('Loading previous...');
+                    }
                 });
             }
             
-            // Run enhancement immediately
+            function navigateNext($button) {
+                console.log('navigateNext called with courseId:', courseId, 'currentPostId:', currentPostId);
+                
+                if (!courseId || !currentPostId) {
+                    console.error('Missing courseId or currentPostId');
+                    return;
+                }
+                
+                $button.text('Loading...');
+                
+                console.log('Making AJAX call to get next step');
+                $.ajax({
+                    url: lilac_ajax.ajax_url,
+                    type: 'POST',
+                    data: {
+                        action: 'lilac_get_next_step',
+                        course_id: courseId,
+                        current_post_id: currentPostId,
+                        nonce: lilac_ajax.nonce
+                    },
+                    success: function(response) {
+                        console.log('AJAX Response:', response);
+                        if (response.success && response.data.next_url) {
+                            console.log('SUCCESS - Next URL:', response.data.next_url);
+                            console.log('Next Title:', response.data.next_title);
+                            console.log('Button Text:', response.data.button_text);
+                            console.log('Debug Info:', response.data.debug);
+                            
+                            if (response.data.button_text) {
+                                var $textSpan = $button.find('.ld-text');
+                                if ($textSpan.length) {
+                                    $textSpan.text(response.data.button_text);
+                                } else {
+                                    $button.text(response.data.button_text);
+                                }
+                            }
+                            
+                            // Navigate to the correct lesson/topic URL
+                            console.log('Navigating to:', response.data.next_url);
+                            window.location.href = response.data.next_url;
+                        } else {
+                            console.log('ERROR - No next step found:', response);
+                            $button.text('End of course');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('AJAX Error:', error);
+                        console.error('Status:', status);
+                        console.error('Response:', xhr.responseText);
+                        $button.text('Error');
+                    }
+                });
+            }
+            
+            function navigatePrevious($button) {
+                if (!courseId || !currentPostId) return;
+                
+                $button.text('Loading...');
+                
+                $.ajax({
+                    url: lilac_ajax.ajax_url,
+                    type: 'POST',
+                    data: {
+                        action: 'lilac_get_previous_step',
+                        course_id: courseId,
+                        current_post_id: currentPostId,
+                        nonce: lilac_ajax.nonce
+                    },
+                    success: function(response) {
+                        if (response.success && response.data.next_url) {
+                            console.log('Previous:', response.data.next_url);
+                            window.location.href = response.data.next_url;
+                        } else {
+                            console.log('No previous step');
+                            $button.text('Start of course');
+                        }
+                    },
+                    error: function() {
+                        console.error('Navigation error');
+                        $button.text('Error');
+                    }
+                });
+            }
+            
+            // Initialize
             enhanceNavigationButtons();
             
-            // Re-run after a short delay to catch dynamically loaded content
-            setTimeout(enhanceNavigationButtons, 1000);
+            // Watch for changes
+            var observer = new MutationObserver(function() {
+                setTimeout(enhanceNavigationButtons, 100);
+            });
             
-            // Re-run after AJAX content loads
-            $(document).ajaxComplete(function() {
-                setTimeout(enhanceNavigationButtons, 500);
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
             });
         });
         </script>
@@ -367,23 +366,45 @@ function lilac_handle_get_next_step() {
     // Get the current post type
     $current_post_type = get_post_type($current_post_id);
     
-    // Get course steps using the correct LearnDash function
-    $course_steps = learndash_get_course_steps($course_id);
+    // Get course lessons and build navigation array (skip quizzes)
+    $lessons = learndash_get_course_lessons_list($course_id);
+    $navigation_steps = [];
     
-    if (empty($course_steps)) {
+    if (empty($lessons)) {
         wp_send_json_error([
-            'message' => 'No course steps found',
+            'message' => 'No course lessons found',
             'debug' => $debug_info
         ]);
     }
     
-    // Convert course steps array to indexed array for easier processing
-    $steps_array = array_keys($course_steps);
-    $debug_info['total_steps'] = count($steps_array);
-    $debug_info['steps_list'] = [];
+    // Build navigation array with lessons and topics only (no quizzes)
+    foreach ($lessons as $lesson) {
+        $navigation_steps[] = $lesson['post']->ID;
+        
+        // Get topics for this lesson
+        $topics = learndash_get_topic_list($lesson['post']->ID, $course_id);
+        if (!empty($topics)) {
+            // Sort topics by menu order
+            usort($topics, function($a, $b) {
+                $order_a = get_post_meta($a->ID, '_ld_topic_order', true);
+                $order_b = get_post_meta($b->ID, '_ld_topic_order', true);
+                if ($order_a == $order_b) {
+                    return $a->menu_order - $b->menu_order;
+                }
+                return $order_a - $order_b;
+            });
+            
+            foreach ($topics as $topic) {
+                $navigation_steps[] = $topic->ID;
+            }
+        }
+    }
     
-    foreach ($steps_array as $index => $step_id) {
-        $debug_info['steps_list'][] = [
+    $debug_info['total_navigation_steps'] = count($navigation_steps);
+    $debug_info['navigation_steps'] = [];
+    
+    foreach ($navigation_steps as $index => $step_id) {
+        $debug_info['navigation_steps'][] = [
             'index' => $index,
             'ID' => $step_id,
             'type' => get_post_type($step_id),
@@ -391,115 +412,166 @@ function lilac_handle_get_next_step() {
         ];
     }
     
-    // Find current position in course steps
-    $current_index = array_search($current_post_id, $steps_array);
-    
-    if ($current_index === false) {
-        // If current post not found directly, it might be a topic - find parent lesson
-        if ($current_post_type === 'sfwd-topic') {
-            $parent_lesson = learndash_course_get_single_parent_step($course_id, $current_post_id, 'sfwd-lessons');
-            $debug_info['parent_lesson_id'] = $parent_lesson;
-            
-            if ($parent_lesson) {
-                $current_index = array_search($parent_lesson, $steps_array);
-                
-                // Get topics for this lesson
-                $lesson_topics = learndash_get_topic_list($parent_lesson, $course_id);
-                $debug_info['lesson_topics'] = [];
-                
-                if (!empty($lesson_topics)) {
-                    foreach ($lesson_topics as $topic) {
-                        $debug_info['lesson_topics'][] = [
-                            'ID' => $topic->ID,
-                            'title' => get_the_title($topic->ID)
-                        ];
-                    }
-                    
-                    // Find next topic in same lesson
-                    $topic_ids = array_map(function($topic) { return $topic->ID; }, $lesson_topics);
-                    $current_topic_index = array_search($current_post_id, $topic_ids);
-                    
-                    if ($current_topic_index !== false && isset($topic_ids[$current_topic_index + 1])) {
-                        $next_topic_id = $topic_ids[$current_topic_index + 1];
-                        wp_send_json_success([
-                            'next_url' => home_url('?p=' . $next_topic_id),
-                            'next_title' => get_the_title($next_topic_id),
-                            'debug' => $debug_info
-                        ]);
-                    }
-                }
-            }
-        }
-    }
-    
+    // Find current position in navigation steps
+    $current_index = array_search($current_post_id, $navigation_steps);
     $debug_info['current_index'] = $current_index;
     
-    // If we found the current position, look for next step
-    if ($current_index !== false && isset($steps_array[$current_index + 1])) {
-        $next_step_id = $steps_array[$current_index + 1];
-        $next_step_type = get_post_type($next_step_id);
-        
-        // If next step is a lesson, get its first topic
-        if ($next_step_type === 'sfwd-lessons') {
-            $lesson_topics = learndash_get_topic_list($next_step_id, $course_id);
-            if (!empty($lesson_topics)) {
-                $first_topic = reset($lesson_topics);
-                $next_step_id = $first_topic->ID;
-            }
-        }
-        
-        wp_send_json_success([
-            'next_url' => home_url('?p=' . $next_step_id),
-            'next_title' => get_the_title($next_step_id),
-            'debug' => $debug_info
-        ]);
-    }
-    
-    // If we're at the end of current lesson but there are more lessons, go to next lesson's first topic
     if ($current_index !== false) {
-        // Look for the next lesson after current position
-        for ($i = $current_index + 1; $i < count($steps_array); $i++) {
-            $step_id = $steps_array[$i];
-            $step_type = get_post_type($step_id);
+        // Found current post in navigation, get next step
+        $next_index = $current_index + 1;
+        
+        if (isset($navigation_steps[$next_index])) {
+            $next_step_id = $navigation_steps[$next_index];
+            $next_step_type = get_post_type($next_step_id);
             
-            if ($step_type === 'sfwd-lessons') {
-                // Found next lesson, get its first topic
-                $lesson_topics = learndash_get_topic_list($step_id, $course_id);
-                if (!empty($lesson_topics)) {
-                    $first_topic = reset($lesson_topics);
-                    wp_send_json_success([
-                        'next_url' => home_url('?p=' . $first_topic->ID),
-                        'next_title' => get_the_title($first_topic->ID),
-                        'debug' => $debug_info
-                    ]);
-                } else {
-                    // No topics in next lesson, go to lesson itself
-                    wp_send_json_success([
-                        'next_url' => home_url('?p=' . $step_id),
-                        'next_title' => get_the_title($step_id),
-                        'debug' => $debug_info
-                    ]);
-                }
-            }
+            // Determine button text based on next step type
+            $button_text = ($next_step_type === 'sfwd-lessons') ? 'לשיעור הבא' : 'הנושא הבא';
+            
+            wp_send_json_success([
+                'next_url' => home_url('?p=' . $next_step_id),
+                'next_title' => get_the_title($next_step_id),
+                'button_text' => $button_text,
+                'debug' => array_merge($debug_info, [
+                    'navigation_type' => 'sequential_navigation',
+                    'next_step_type' => $next_step_type,
+                    'next_index' => $next_index
+                ])
+            ]);
+        } else {
+            // We're at the end of the course
+            wp_send_json_success([
+                'next_url' => '',
+                'next_title' => 'סיום הקורס',
+                'button_text' => 'סיום הקורס',
+                'debug' => array_merge($debug_info, [
+                    'navigation_type' => 'course_completed'
+                ])
+            ]);
         }
+    } else {
+        // Current post not found in navigation (shouldn't happen with proper setup)
+        wp_send_json_error([
+            'message' => 'Current post not found in course navigation',
+            'debug' => $debug_info
+        ]);
+    }
+}
+
+/**
+ * AJAX handler for previous step navigation
+ */
+add_action('wp_ajax_lilac_get_previous_step', 'lilac_handle_get_previous_step');
+add_action('wp_ajax_nopriv_lilac_get_previous_step', 'lilac_handle_get_previous_step');
+function lilac_handle_get_previous_step() {
+    // Verify nonce
+    if (!wp_verify_nonce($_POST['nonce'], 'lilac_navigation')) {
+        wp_send_json_error('Security check failed');
     }
     
-    // If we're at the last step, return the course URL
-    $course_url = get_permalink($course_id);
-    if ($course_url) {
-        wp_send_json_success([
-            'next_url' => $course_url,
-            'next_title' => __('Back to Course', 'learndash'),
-            'is_course_complete' => true,
+    $course_id = intval($_POST['course_id']);
+    $current_post_id = intval($_POST['current_post_id']);
+    
+    if (!$course_id || !$current_post_id) {
+        wp_send_json_error('Missing required parameters');
+    }
+    
+    // Debug information
+    $debug_info = [
+        'course_id' => $course_id,
+        'current_post_id' => $current_post_id,
+        'current_post_type' => get_post_type($current_post_id),
+        'current_post_title' => get_the_title($current_post_id)
+    ];
+    
+    // Get course lessons and build navigation array (skip quizzes) - same as next step
+    $lessons = learndash_get_course_lessons_list($course_id);
+    $navigation_steps = [];
+    
+    if (empty($lessons)) {
+        wp_send_json_error([
+            'message' => 'No course lessons found',
             'debug' => $debug_info
         ]);
     }
     
-    // If we get here, no next step was found
-    wp_send_json_error([
-        'message' => 'No next step found',
-        'debug' => $debug_info
-    ]);
+    // Build navigation array with lessons and topics only (no quizzes)
+    foreach ($lessons as $lesson) {
+        $navigation_steps[] = $lesson['post']->ID;
+        
+        // Get topics for this lesson
+        $topics = learndash_get_topic_list($lesson['post']->ID, $course_id);
+        if (!empty($topics)) {
+            // Sort topics by menu order
+            usort($topics, function($a, $b) {
+                $order_a = get_post_meta($a->ID, '_ld_topic_order', true);
+                $order_b = get_post_meta($b->ID, '_ld_topic_order', true);
+                if ($order_a == $order_b) {
+                    return $a->menu_order - $b->menu_order;
+                }
+                return $order_a - $order_b;
+            });
+            
+            foreach ($topics as $topic) {
+                $navigation_steps[] = $topic->ID;
+            }
+        }
+    }
+    
+    $debug_info['total_navigation_steps'] = count($navigation_steps);
+    $debug_info['navigation_steps'] = [];
+    
+    foreach ($navigation_steps as $index => $step_id) {
+        $debug_info['navigation_steps'][] = [
+            'index' => $index,
+            'ID' => $step_id,
+            'type' => get_post_type($step_id),
+            'title' => get_the_title($step_id)
+        ];
+    }
+    
+    // Find current position in navigation steps
+    $current_index = array_search($current_post_id, $navigation_steps);
+    $debug_info['current_index'] = $current_index;
+    
+    if ($current_index !== false) {
+        // Found current post in navigation, get previous step
+        $previous_index = $current_index - 1;
+        
+        if (isset($navigation_steps[$previous_index])) {
+            $previous_step_id = $navigation_steps[$previous_index];
+            $previous_step_type = get_post_type($previous_step_id);
+            
+            // Determine button text based on previous step type
+            $button_text = ($previous_step_type === 'sfwd-lessons') ? 'לשיעור הקודם' : 'הנושא הקודם';
+            
+            wp_send_json_success([
+                'next_url' => home_url('?p=' . $previous_step_id),
+                'next_title' => get_the_title($previous_step_id),
+                'button_text' => $button_text,
+                'debug' => array_merge($debug_info, [
+                    'navigation_type' => 'sequential_previous_navigation',
+                    'previous_step_type' => $previous_step_type,
+                    'previous_index' => $previous_index
+                ])
+            ]);
+        } else {
+            // We're at the beginning of the course
+            wp_send_json_success([
+                'next_url' => get_permalink($course_id),
+                'next_title' => 'חזרה לקורס',
+                'button_text' => 'חזרה לקורס',
+                'debug' => array_merge($debug_info, [
+                    'navigation_type' => 'course_beginning'
+                ])
+            ]);
+        }
+    } else {
+        // Current post not found in navigation (shouldn't happen with proper setup)
+        wp_send_json_error([
+            'message' => 'Current post not found in course navigation',
+            'debug' => $debug_info
+        ]);
+    }
 }
 
 /**
@@ -562,6 +634,7 @@ function lilac_debug_course_structure() {
                     $quizzes = learndash_get_lesson_quiz_list($lesson_id, null, $course_id);
                     if (!empty($quizzes)) {
                         echo '<div style="margin-left: 20px; font-size: 10px; color: #f90;">';
+                        $quiz_index = 0;
                         foreach ($quizzes as $quiz) {
                             $quiz_id = $quiz['post']->ID;
                             $quiz_title = $quiz['post']->post_title;
@@ -569,9 +642,37 @@ function lilac_debug_course_structure() {
                             $is_current_quiz = ($quiz_id == $post->ID);
                             
                             $quiz_style = $is_current_quiz ? 'background: #ff0; color: #000; font-weight: bold;' : '';
-                            echo '<div style="' . $quiz_style . ' padding: 1px; margin: 1px 0;">└─ ❓ <a href="' . $quiz_url . '" style="color: inherit; text-decoration: underline;">' . $quiz_title . ' (ID:' . $quiz_id . ')</a></div>';
+                            echo '<div style="' . $quiz_style . ' padding: 1px; margin: 1px 0;">└─ ❓ [Q' . $quiz_index . '] <a href="' . $quiz_url . '" style="color: inherit; text-decoration: underline;">' . $quiz_title . ' (ID:' . $quiz_id . ')</a></div>';
+                            $quiz_index++;
                         }
                         echo '</div>';
+                    }
+                    
+                    // Get topic quizzes
+                    if (!empty($topics)) {
+                        foreach ($topics as $topic) {
+                            // Use the correct LearnDash function to get quizzes for a topic
+                            if (function_exists('learndash_course_get_quizzes')) {
+                                $topic_quizzes = learndash_course_get_quizzes($course_id, $topic->ID);
+                                if (!empty($topic_quizzes)) {
+                                    echo '<div style="margin-left: 40px; font-size: 9px; color: #f90;">';
+                                    foreach ($topic_quizzes as $topic_quiz_data) {
+                                        // Handle both post ID and post object cases
+                                        $topic_quiz_id = is_object($topic_quiz_data) ? $topic_quiz_data->ID : $topic_quiz_data;
+                                        $topic_quiz = get_post($topic_quiz_id);
+                                        if ($topic_quiz) {
+                                            $topic_quiz_title = $topic_quiz->post_title;
+                                            $topic_quiz_url = home_url('?p=' . $topic_quiz_id);
+                                            $is_current_topic_quiz = ($topic_quiz_id == $post->ID);
+                                            
+                                            $topic_quiz_style = $is_current_topic_quiz ? 'background: #ff0; color: #000; font-weight: bold;' : '';
+                                            echo '<div style="' . $topic_quiz_style . ' padding: 1px; margin: 1px 0;">  └─ ❓ <a href="' . $topic_quiz_url . '" style="color: inherit; text-decoration: underline;">' . $topic_quiz_title . ' (ID:' . $topic_quiz_id . ')</a></div>';
+                                        }
+                                    }
+                                    echo '</div>';
+                                }
+                            }
+                        }
                     }
                     
                     echo '</div>';
@@ -609,5 +710,18 @@ function lilac_debug_course_structure() {
             
             echo '</div>';
         }
+    }
+}
+
+/**
+ * Enqueue AJAX script localization
+ */
+add_action('wp_enqueue_scripts', 'lilac_enqueue_navigation_ajax');
+function lilac_enqueue_navigation_ajax() {
+    if (is_singular(['sfwd-lessons', 'sfwd-topic', 'sfwd-quiz'])) {
+        wp_localize_script('jquery', 'lilac_ajax', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('lilac_navigation')
+        ]);
     }
 }
