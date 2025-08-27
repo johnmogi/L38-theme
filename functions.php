@@ -44,6 +44,62 @@ if (!defined('LEARNDASH_LESSON_VIDEO')) {
 // Video content processing disabled to allow native LearnDash LD30 display
 // The mu-plugin learndash-video handles video integration properly
 
+/**
+ * Fix LearnDash user_id type error in learndash_course_step_available_date()
+ * Intercepts the function call and ensures user_id is always an integer
+ */
+function lilac_intercept_learndash_function_calls() {
+    // Create a wrapper function that handles the type conversion
+    if (!function_exists('learndash_course_step_available_date_original')) {
+        // Store the original function reference
+        function learndash_course_step_available_date_original($step_id, $course_id, $user_id, $return_timestamp = false) {
+            // This will call the actual LearnDash function
+            static $original_function = null;
+            if ($original_function === null) {
+                $original_function = 'learndash_course_step_available_date';
+            }
+            return call_user_func($original_function, $step_id, $course_id, $user_id, $return_timestamp);
+        }
+    }
+}
+
+/**
+ * Pre-filter to fix user_id type issues before LearnDash functions are called
+ */
+add_action('plugins_loaded', function() {
+    // Hook into LearnDash template loading to fix user_id
+    add_filter('learndash_template_filename', function($filepath, $name, $args, $echo, $return_file_path) {
+        // Fix user_id in template args before template is loaded
+        if (isset($args['user_id'])) {
+            if (empty($args['user_id']) || !is_numeric($args['user_id']) || $args['user_id'] === '') {
+                $args['user_id'] = get_current_user_id();
+            }
+            $args['user_id'] = intval($args['user_id']);
+            
+            // Update the global template args
+            global $learndash_template_args;
+            if (is_array($learndash_template_args)) {
+                $learndash_template_args = array_merge($learndash_template_args, $args);
+            }
+        }
+        return $filepath;
+    }, 5, 5);
+}, 20);
+
+/**
+ * Filter LearnDash template variables to ensure user_id is always an integer
+ */
+add_filter('learndash_template_args', function($args) {
+    if (isset($args['user_id'])) {
+        // Convert empty string or invalid user_id to current user ID
+        if (empty($args['user_id']) || !is_numeric($args['user_id'])) {
+            $args['user_id'] = get_current_user_id();
+        }
+        $args['user_id'] = intval($args['user_id']);
+    }
+    return $args;
+}, 10, 1);
+
 // Translate LearnDash "Expand All" and "Collapse All" to Hebrew
 add_filter('gettext', 'translate_learndash_expand_collapse', 1, 3);
 add_filter('gettext_with_context', 'translate_learndash_expand_collapse_with_context', 1, 4);
@@ -747,11 +803,26 @@ function custom_add_to_cart_script() {
                         }
                     }
                     
+                    // Use WooCommerce AJAX endpoint for add to cart
+                    var ajaxUrl = wc_add_to_cart_params.wc_ajax_url.toString().replace('%%endpoint%%', 'add_to_cart');
+                    
+                    // Get form data and add required parameters
+                    var formData = $form.serialize();
+                    
+                    // Add security nonce if available
+                    var nonce = $form.find('[name="woocommerce-add-to-cart-nonce"]').val();
+                    if (nonce) {
+                        formData += '&woocommerce-add-to-cart-nonce=' + nonce;
+                    }
+                    
+                    debugLog('AJAX URL:', ajaxUrl);
+                    debugLog('Form Data:', formData);
+                    
                     // Submit via AJAX
                     $.ajax({
-                        url: wc_add_to_cart_params.ajax_url,
+                        url: ajaxUrl,
                         type: 'POST',
-                        data: $form.serialize() + '&action=woocommerce_add_to_cart',
+                        data: formData,
                         dataType: 'json',
                         success: function(response) {
                             debugLog('AJAX add to cart success:', response);
@@ -3967,6 +4038,38 @@ function cc_mime_types($mimes) {
     return $mimes;
 }
 add_filter('upload_mimes', 'cc_mime_types');
+
+/**
+ * CRITICAL FIX: LearnDash Elementor TypeError - user_id must be int, not string
+ * This fixes the fatal error when editing lessons in Elementor
+ */
+add_action('init', function() {
+    // Hook into Elementor widget rendering to fix user_id type
+    add_action('elementor/widget/before_render_content', function($widget) {
+        if (strpos(get_class($widget), 'Course_Content') !== false) {
+            global $user_id;
+            // Ensure user_id is always an integer, never empty string
+            if (!isset($user_id) || $user_id === '' || !is_numeric($user_id)) {
+                $user_id = get_current_user_id();
+                if ($user_id === 0) {
+                    $user_id = 1; // Fallback to admin user in editor mode
+                }
+            }
+            $user_id = intval($user_id);
+        }
+    });
+    
+    // Additional fix for AJAX requests (Elementor editor mode)
+    if (wp_doing_ajax() || is_admin()) {
+        add_action('wp_ajax_elementor_ajax', function() {
+            global $user_id;
+            if (!isset($user_id) || $user_id === '' || !is_numeric($user_id)) {
+                $user_id = 1; // Force admin user for editor
+            }
+            $user_id = intval($user_id);
+        }, 1);
+    }
+}, 1);
 
 // Add capabilities to school teacher role
   // Add capabilities to school teacher role

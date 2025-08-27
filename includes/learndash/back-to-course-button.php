@@ -2,7 +2,8 @@
 /**
  * Back to Course Button for LearnDash Navigation
  * 
- * Adds dynamic "Back to Course" button on quiz, topic, and lesson pages
+ * This file is now a placeholder as the back-to-course button
+ * has been moved to the quiz sidebar template.
  */
 
 // Prevent direct access
@@ -10,92 +11,39 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Track if button has been displayed
-$lilac_button_displayed = false;
-
-// Enqueue minimal styles - most styling is now inline
+// Enqueue minimal styles for the back to course button
 add_action('wp_enqueue_scripts', function() {
-    if (is_singular(['sfwd-lessons', 'sfwd-topic', 'sfwd-quiz', 'sfwd-courses'])) {
+    if (is_singular('sfwd-quiz')) {
         $css = '
-        /* Back to course button styles */
+        /* Back to course button styles in quiz sidebar */
         .lilac-back-to-course-wrapper {
-            position: relative;
-            margin: 20px 0;
             text-align: center;
+            margin: 15px 0;
         }
         
-        /* For quiz pages, position at top */
-        body.single-sfwd-quiz .lilac-back-to-course-wrapper {
-            position: absolute;
-            top: 10px;
-            right: 20px;
-            margin: 0;
-            z-index: 100;
-        }
-        
-        .continue-button:hover {
-            background-color: #218838;
-            border-color: #1e7e34;
-            color: #fff;
+        .back-to-course-btn {
+            display: inline-block;
+            padding: 12px 25px;
+            background-color: rgba(44, 51, 145, 1);
+            color: white;
             text-decoration: none;
+            border-radius: 25px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .back-to-course-btn:hover {
+            background-color: rgba(44, 51, 145, 1) !important;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
         }';
         
         wp_add_inline_style('hello-theme-style', $css);
     }
 });
 
-/**
- * Add back to course button to LearnDash content
- */
-function lilac_add_back_to_course_button($content = '') {
-    global $post, $lilac_button_displayed;
-    
-    // Only run on LearnDash post types and only once
-    if (!is_singular(['sfwd-lessons', 'sfwd-topic', 'sfwd-quiz']) || $lilac_button_displayed) {
-        return $content;
-    }
-    
-    // Get course ID
-    $course_id = learndash_get_course_id($post->ID);
-    if (empty($course_id)) {
-        return $content;
-    }
-    
-    // Get course URL and title
-    $course_url = get_permalink($course_id);
-    $course_title = get_the_title($course_id);
-    
-    // Generate button HTML with proper positioning
-    $button = sprintf(
-        '<div class="lilac-back-to-course-wrapper">
-            <a href="%s" class="continue-button" title="%s" style="display: inline-block; padding: 8px 16px; border-radius: 4px; background-color: #28a745; color: #fff; text-decoration: none; border: 1px solid #28a745; font-size: 14px; font-weight: 500; transition: all 0.3s ease;">
-                <span>← חזרה לקורס</span>
-            </a>
-        </div>',
-        esc_url($course_url),
-        esc_attr($course_title)
-    );
-    
-    // Mark as displayed
-    $lilac_button_displayed = true;
-    
-    // If called as a filter, prepend to content
-    if (doing_filter("the_content")) {
-        return $button . $content;
-    } 
-    // Otherwise, output directly
-    else {
-        echo $button;
-    }
-}
-
-// Hook into multiple LearnDash template locations to ensure button appears
-add_action('learndash-content-tabs-before', 'lilac_add_back_to_course_button');
-add_action('learndash-topic-before', 'lilac_add_back_to_course_button');
-add_action('learndash-lesson-before', 'lilac_add_back_to_course_button');
-add_action('learndash-quiz-before', 'lilac_add_back_to_course_button');
-
-// For quiz pages specifically, add to content filter to ensure proper placement
+// For quiz pages specifically, ensure our styles are loaded
 add_filter('the_content', function($content) {
     if (is_singular('sfwd-quiz')) {
         return lilac_add_back_to_course_button($content);
